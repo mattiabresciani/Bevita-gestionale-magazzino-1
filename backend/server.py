@@ -7,7 +7,7 @@ from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 from datetime import timedelta
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
