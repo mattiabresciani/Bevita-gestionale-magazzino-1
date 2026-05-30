@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scaffalatura — Bevita</title>
+    <link rel="icon" href="img/faviconBevita.png">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <header id="main-header" class="main-header"></header>
+
+    <!-- POPUP DETTAGLI COMMESSA -->
+    <div class="scaffale-popup-overlay" id="scaffalePopupOverlay">
+        <div class="scaffale-popup">
+            <div class="sp-header">
+                <div class="sp-header-info">
+                    <span class="sp-codice" id="spCodice">—</span>
+                    <span class="sp-desc"   id="spDesc">—</span>
+                </div>
+                <button class="modal-close" id="spClose"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="sp-body" id="spBody">
+                <div class="sp-loading"><i class="fa-solid fa-spinner fa-spin"></i> Caricamento...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL ASSEGNAZIONE CELLA -->
+    <div class="cell-assign-overlay" id="cellAssignOverlay">
+        <div class="cell-assign-modal">
+            <div class="ca-header">
+                <span class="ca-title" id="caTitle">Cella —</span>
+                <button class="modal-close" id="caClose"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="ca-body" id="caBody">
+                <!-- popolato dinamicamente da scaffaleOpenCellModal() in framework.js -->
+            </div>
+            <div class="ca-footer">
+                <button class="ca-btn-clear" id="caBtnClear"><i class="fa-solid fa-trash"></i> Svuota</button>
+                <button class="ca-btn-save"  id="caBtnSave">Salva</button>
+            </div>
+        </div>
+    </div>
+
+    <main class="scaffale-main">
+
+        <div class="scaffale-toprow">
+            <h1 class="scaffale-title">Scaffalatura</h1>
+            <div class="scaffale-search-wrap">
+                <i class="fa-solid fa-magnifying-glass scaffale-search-icon"></i>
+                <input type="text" class="scaffale-search-input" id="scaffaleSearchInput" placeholder="Cerca commessa...">
+                <div class="scaffale-search-dropdown" id="scaffaleSearchDropdown"></div>
+            </div>
+        </div>
+
+        <div class="shelf-photo-wrapper">
+            <img src="img/fotoScaffalatura.png" alt="Scaffalatura magazzino" class="shelf-photo">
+            <div class="shelf-overlay" id="shelfOverlay"></div>
+        </div>
+
+    </main>
+
+    <script>
+        if (!localStorage.getItem('token')) window.location.href = 'login.html';
+    </script>
+    <script src="framework.js"></script>
+
+</body>
+</html>

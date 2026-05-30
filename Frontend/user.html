@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestione Utenti — Bevita</title>
+    <link rel="icon" href="img/faviconBevita.png">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        .user-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .user-card {
+            background: var(--clr-card-bg);
+            border: 1px solid var(--clr-border);
+            border-radius: 14px;
+            padding: 18px 24px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            transition: border-color 0.2s;
+        }
+        .user-card:hover { border-color: #3d3d3d; }
+
+        .user-avatar {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-pink), #d60062);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 700;
+            color: #fff;
+            flex-shrink: 0;
+            font-family: var(--ff-display);
+        }
+
+        .user-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .user-nome {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--clr-dash-text);
+            font-family: var(--ff-display);
+        }
+        .user-login {
+            font-size: 13px;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        .user-ruolo-badge {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 4px 12px;
+            border-radius: 50px;
+            background: #1f2b1f;
+            color: #4ade80;
+            border: 1px solid #1a5c33;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .user-btn {
+            background: none;
+            border: 1px solid var(--clr-border);
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+            color: #aaa;
+        }
+        .user-btn:hover { background: #2a2a2a; color: #e8e8e8; border-color: #444; }
+        .user-btn.danger:hover { background: #2d0f1e; color: var(--primary-pink); border-color: var(--primary-pink); }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #555;
+            font-size: 15px;
+        }
+        .empty-state i { font-size: 40px; margin-bottom: 14px; display: block; }
+    </style>
+</head>
+<body>
+
+    <header id="main-header" class="main-header"></header>
+
+    <!-- MODALE NUOVO UTENTE / CAMBIA PASSWORD -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Nuovo Utente</h3>
+                <button class="modal-close" id="modalClose"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer">
+                <button class="modal-btn-cancel" id="modalCancel">Annulla</button>
+                <button class="modal-btn-save" id="modalSave">Salva</button>
+            </div>
+        </div>
+    </div>
+
+    <main class="main-content">
+        <div class="top-row">
+            <h2 class="page-title">Gestione Utenti</h2>
+            <button class="add-btn" id="addBtn">
+                <i class="fa-solid fa-user-plus"></i> Registra
+            </button>
+        </div>
+
+        <div class="user-grid" id="userGrid">
+            <p class="loading-msg">Caricamento...</p>
+        </div>
+    </main>
+
+    <script>
+        const API = 'http://localhost:5001';
+        const token = localStorage.getItem('token');
+
+        // Auth guard — solo admin
+        (function() {
+            if (!token) { window.location.href = 'login.html'; return; }
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+                if (payload.ruolo !== 'admin') window.location.href = 'index.html';
+            } catch(e) { window.location.href = 'login.html'; }
+        })();
+
+        function apiFetch(path, method = 'GET', body = null) {
+            const opts = {
+                method,
+                headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+            };
+            if (body) opts.body = JSON.stringify(body);
+            return fetch(API + path, opts).then(r => {
+                if (r.status === 401) { localStorage.clear(); window.location.href = 'login.html'; }
+                return r;
+            });
+        }
+
+        // ── Rendering ──────────────────────────────────────────────────────
+        function iniziale(u) {
+            const n = (u.nome || '').trim();
+            const c = (u.cognome || '').trim();
+            if (n && c) return (n[0] + c[0]).toUpperCase();
+            if (n) return n[0].toUpperCase();
+            return u.identificatore_login[0].toUpperCase();
+        }
+
+        function nomeCompleto(u) {
+            const n = [u.nome, u.cognome].filter(Boolean).join(' ');
+            return n || u.identificatore_login;
+        }
+
+        function renderUtenti(utenti) {
+            const grid = document.getElementById('userGrid');
+            if (!utenti.length) {
+                grid.innerHTML = `<div class="empty-state"><i class="fa-solid fa-users-slash"></i>Nessun dipendente registrato</div>`;
+                return;
+            }
+            grid.innerHTML = utenti.map(u => `
+                <div class="user-card" data-id="${u.id}">
+                    <div class="user-avatar">${iniziale(u)}</div>
+                    <div class="user-info">
+                        <div class="user-nome">${nomeCompleto(u)}</div>
+                        <div class="user-login"><i class="fa-solid fa-at" style="font-size:11px;margin-right:4px;"></i>${u.identificatore_login}</div>
+                    </div>
+                    <span class="user-ruolo-badge">${u.ruolo}</span>
+                    <div class="user-actions">
+                        <button class="user-btn" onclick="apriCambioPassword(${u.id}, '${u.identificatore_login}')">
+                            <i class="fa-solid fa-key"></i> Password
+                        </button>
+                        <button class="user-btn danger" onclick="eliminaUtente(${u.id}, '${nomeCompleto(u).replace(/'/g,"\\'")}')">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function caricaUtenti() {
+            apiFetch('/utenti')
+                .then(r => r.json())
+                .then(renderUtenti)
+                .catch(() => {
+                    document.getElementById('userGrid').innerHTML =
+                        `<p class="loading-msg">Errore nel caricamento degli utenti.</p>`;
+                });
+        }
+
+        // ── Modale ─────────────────────────────────────────────────────────
+        const overlay  = document.getElementById('modalOverlay');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody  = document.getElementById('modalBody');
+        const modalSave  = document.getElementById('modalSave');
+
+        function apriModal() { overlay.classList.add('open'); }
+        function chiudiModal() { overlay.classList.remove('open'); modalSave.onclick = null; }
+
+        document.getElementById('modalClose').onclick  = chiudiModal;
+        document.getElementById('modalCancel').onclick = chiudiModal;
+        overlay.addEventListener('click', e => { if (e.target === overlay) chiudiModal(); });
+
+        // Nuovo utente
+        document.getElementById('addBtn').onclick = function() {
+            modalTitle.textContent = 'Registra Dipendente';
+            modalBody.innerHTML = `
+                <div class="modal-field">
+                    <label>Nome</label>
+                    <input type="text" id="mNome" placeholder="Nome">
+                </div>
+                <div class="modal-field">
+                    <label>Cognome</label>
+                    <input type="text" id="mCognome" placeholder="Cognome">
+                </div>
+                <div class="modal-field">
+                    <label>Identificatore login *</label>
+                    <input type="text" id="mLogin" placeholder="es. mario.rossi">
+                </div>
+                <div class="modal-field">
+                    <label>Password *</label>
+                    <input type="password" id="mPassword" placeholder="••••••••">
+                </div>
+            `;
+            apriModal();
+            document.getElementById('mNome').focus();
+
+            modalSave.onclick = function() {
+                const body = {
+                    nome: document.getElementById('mNome').value.trim(),
+                    cognome: document.getElementById('mCognome').value.trim(),
+                    identificatore_login: document.getElementById('mLogin').value.trim(),
+                    password: document.getElementById('mPassword').value
+                };
+                if (!body.identificatore_login || !body.password) {
+                    alert('Identificatore login e password sono obbligatori.'); return;
+                }
+                apiFetch('/utenti', 'POST', body)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.errore) { alert(data.errore); return; }
+                        chiudiModal();
+                        caricaUtenti();
+                    });
+            };
+        };
+
+        // Cambia password
+        function apriCambioPassword(id, login) {
+            modalTitle.textContent = 'Cambia Password';
+            modalBody.innerHTML = `
+                <div class="modal-field">
+                    <label>Utente</label>
+                    <input type="text" value="${login}" disabled style="opacity:0.5;cursor:not-allowed;">
+                </div>
+                <div class="modal-field">
+                    <label>Nuova password *</label>
+                    <input type="password" id="mNuovaPassword" placeholder="••••••••">
+                </div>
+            `;
+            apriModal();
+            document.getElementById('mNuovaPassword').focus();
+
+            modalSave.onclick = function() {
+                const pwd = document.getElementById('mNuovaPassword').value;
+                if (!pwd) { alert('Inserisci la nuova password.'); return; }
+                apiFetch(`/utenti/${id}/password`, 'PUT', { password: pwd })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.errore) { alert(data.errore); return; }
+                        chiudiModal();
+                    });
+            };
+        }
+
+        // Elimina utente
+        function eliminaUtente(id, nome) {
+            if (!confirm(`Eliminare l'account di "${nome}"? L'operazione è irreversibile.`)) return;
+            apiFetch(`/utenti/${id}`, 'DELETE')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.errore) { alert(data.errore); return; }
+                    caricaUtenti();
+                });
+        }
+
+        // ── Avvio ──────────────────────────────────────────────────────────
+        caricaUtenti();
+    </script>
+
+    <script src="framework.js"></script>
+
+</body>
+</html>

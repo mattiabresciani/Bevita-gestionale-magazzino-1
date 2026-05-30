@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="img/faviconBevita.png">
+    <title>Bevita Magazzino - Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="login-page">
+    <div align="center">
+        <div class="login-card">
+        
+            <div class="login-logo-container">
+                <img src="img/logoBevita.png" alt="logoBevita">
+            </div>
+
+            <form id="loginForm" class="login-form">
+                
+                <div class="input-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="..." required>
+                </div>
+
+                <div class="input-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="***" required>
+                </div>
+
+                <button type="submit" class="login-submit-btn">Login</button>
+            
+                <p id="messaggio" style="font-weight: bold; color: #ff1a8c; min-height: 24px; margin-top: 15px;"></p>
+            
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const username = document.getElementById("username").value.trim();
+        const password = document.getElementById("password").value;
+        const messaggioEl = document.getElementById("messaggio");
+
+        try {
+            const res = await fetch('http://localhost:5001/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            const data = await res.json();
+
+            if (res.ok && data.token) {
+                localStorage.setItem('token', data.token);
+                messaggioEl.style.color = "lightgreen";
+                messaggioEl.textContent = "Login effettuato! Reindirizzamento...";
+                setTimeout(() => {
+                    window.location.href = "index.html";
+                }, 1500);
+            } else {
+                messaggioEl.style.color = "#ff1a8c";
+                messaggioEl.textContent = data.errore ?? "Credenziali sbagliate";
+            }
+
+        } catch (err) {
+            messaggioEl.style.color = "#ff1a8c";
+            messaggioEl.textContent = "Errore di connessione al server.";
+            console.error(err);
+        }
+    });
+    </script>
+    <script src="framework.js"></script>
+    <script>
+        
+    </script>
+</body>
+</html>

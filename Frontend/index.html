@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home — Bevita</title>
+    <link rel="icon" href="img/faviconBevita.png">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* ── Homepage layout ─────────────────────────────────────── */
+        .home-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            gap: 52px;
+        }
+
+        /* Blocco logo + titolo */
+        .home-brand {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            text-align: center;
+        }
+        .home-logo {
+            height: 72px;
+            width: auto;
+        }
+        .home-title {
+            font-size: 38px;
+            font-weight: 700;
+            color: #1c1c1c;
+            font-family: 'Poppins', sans-serif;
+            letter-spacing: -0.5px;
+        }
+        .home-subtitle {
+            font-size: 15px;
+            color: #999;
+            font-weight: 400;
+            margin-top: -8px;
+        }
+
+        /*
+         * Griglia card: 4 per riga, poi va a capo automaticamente.
+         * Per aggiungere un bottone basta aggiungere un <a class="home-card-btn"> dentro .home-cards-grid.
+         */
+        .home-cards-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            max-width: 1040px;
+            width: 100%;
+        }
+
+        /* Singola card-bottone */
+        .home-card-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            background: #fff;
+            border: 2px solid #ebebeb;
+            border-radius: 22px;
+            padding: 40px 20px;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s, transform 0.18s;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            width: 235px;
+        }
+        .home-card-btn:hover {
+            border-color: #e5006d;
+            box-shadow: 0 10px 36px rgba(229,0,109,0.14);
+            transform: translateY(-4px);
+        }
+        .home-card-btn:active {
+            transform: translateY(-1px);
+        }
+
+        .home-card-btn i {
+            font-size: 40px;
+            color: #e5006d;
+            line-height: 1;
+        }
+        .home-card-label {
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Poppins', sans-serif;
+            color: #1c1c1c;
+            text-align: center;
+        }
+        .home-card-desc {
+            font-size: 12px;
+            color: #aaa;
+            font-weight: 400;
+            text-align: center;
+            line-height: 1.5;
+        }
+        .home-card-btn-primary {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            background: #e5006d;
+            border: 2px solid #ebebeb;
+            border-radius: 22px;
+            padding: 40px 20px;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s, transform 0.18s;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            width: 235px;
+        }
+        .home-card-btn-primary:hover {
+            border-color: #e5006d;
+            box-shadow: 0 10px 36px rgba(229,0,109,0.14);
+            transform: translateY(-4px);
+        }
+        .home-card-btn-primary:active {
+            transform: translateY(-1px);
+        }
+
+        .home-card-btn-primary i {
+            font-size: 40px;
+            color: #fff;
+            line-height: 1;
+        }
+        .home-card-label {
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Poppins', sans-serif;
+            color: #1c1c1c;
+            text-align: center;
+        }
+        .home-card-primary-label {
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Poppins', sans-serif;
+            color: #ffffff;
+            text-align: center;
+        }
+
+
+        /* Responsive: card full-width su mobile */
+        @media (max-width: 480px) {
+            .home-card-btn,
+            .home-card-btn-primary { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <header id="main-header" class="main-header"></header>
+
+    <main class="home-main">
+
+        <div class="home-brand">
+            <div>
+                <h1 class="home-title">Benvenuto <span id="username"></span>!</h1>
+                <p class="home-subtitle">Tutto a posto in magazzino? Vediamo un po'!</p>
+            </div>
+        </div>
+
+        <!-- Griglia card: max 4 per riga, poi va a capo -->
+        <div class="home-cards-grid">
+
+            <a href="scaffalatura.html" class="home-card-btn-primary">
+                <i class="fa-solid fa-dolly"></i>
+                <span class="home-card-primary-label">Scaffalatura</span>
+                <span class="home-card-desc" color="white">Scaffalatura ottimizzata per commessa</span>
+            </a>
+
+            <a href="magazzino.html" class="home-card-btn">
+                <i class="fa-solid fa-warehouse"></i>
+                <span class="home-card-label">Inventario e Gestionale</span>
+                <span class="home-card-desc">Commesse, macchine, materiali e produzione</span>
+            </a>
+
+            <a href="user.html" class="home-card-btn" id="adminCard" style="display:none;">
+                <i class="fa-solid fa-users-gear"></i>
+                <span class="home-card-label">Gestione Utenti</span>
+                <span class="home-card-desc">Registra dipendenti e gestisci gli accessi</span>
+            </a>
+
+            <a href="magazzino.html" class="home-card-btn">
+                <i class="fa-solid fa-dumpster-fire"></i>
+                <span class="home-card-label">Futura aggiunta</span>
+                <span class="home-card-desc">Calcolatore margini, visualizzatore scaffalature e probabile aggancio al lavoro dell'anno scorso</span>
+            </a>
+
+        </div>
+
+    </main>
+
+    <script>
+        if (!localStorage.getItem('token')) window.location.href = 'login.html';
+    </script>
+    <script src="framework.js"></script>
+    <script>
+        fetch('http://localhost:5001/logininfo', {
+            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ruolo === 'admin') {
+                document.getElementById('username').textContent = 'Admin';
+                document.getElementById('adminCard').style.display = '';
+            } else {
+                document.getElementById('username').textContent = data.nome || data.username || '';
+            }
+        });
+    </script>
+
+</body>
+</html>

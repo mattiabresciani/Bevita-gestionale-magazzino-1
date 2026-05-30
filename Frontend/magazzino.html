@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestione Magazzino — Bevita</title>
+    <link rel="icon" href="img/faviconBevita.png">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+
+    <header id="main-header" class="main-header"></header>
+
+    <!-- SCHEDA MACCHINA -->
+    <div class="machine-overlay" id="machineOverlay">
+        <div class="machine-panel">
+            <div class="machine-panel-header">
+                <h2 id="machinePanelTitle">Scheda Macchina</h2>
+                <button class="machine-panel-close" id="machinePanelClose"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="machine-panel-body">
+                <div class="machine-panel-left">
+                    <div class="machine-info-box">
+                        <div class="machine-info-row">
+                            <span class="machine-info-label">Codice</span>
+                            <span id="machineInfoCode" class="machine-info-value">-</span>
+                        </div>
+                        <div class="machine-info-row">
+                            <span class="machine-info-label">Descrizione</span>
+                            <span id="machineInfoDesc" class="machine-info-value">-</span>
+                        </div>
+                        <div class="machine-info-row">
+                            <span class="machine-info-label">Quantità</span>
+                            <span id="machineInfoQty" class="machine-info-value">-</span>
+                        </div>
+                        <div class="machine-info-row">
+                            <span class="machine-info-label">Stato</span>
+                            <span id="machineInfoStato" class="machine-info-value">-</span>
+                        </div>
+                    </div>
+                    <div class="machine-photo-container">
+                        <img id="machinePhoto" src="" alt="Foto macchina" class="machine-photo" style="display:none;">
+                        <p id="machineNoPhoto" class="machine-no-file"><i class="fa-regular fa-image"></i><br>Nessuna foto disponibile</p>
+                    </div>
+                </div>
+                <div class="machine-panel-right">
+                    <div class="machine-bom-section" id="bomSection">
+                        <div class="bom-toolbar">
+                            <span class="bom-toolbar-title" id="bomTitle">
+                                <i class="fa-solid fa-diagram-project"></i> Albero Lavorazioni
+                            </span>
+                            <button class="bom-fullscreen-btn" id="bomFullscreenBtn" title="Schermo intero">
+                                <i class="fa-solid fa-expand"></i>
+                            </button>
+                        </div>
+                        <div class="machine-bom-graph" id="machineBomGraph">
+                            <p class="machine-no-file">Caricamento...</p>
+                        </div>
+                    </div>
+                    <div class="machine-st-section">
+                        <p class="machine-st-title">Schede Tecniche</p>
+                        <div class="machine-st-list" id="machineStList"></div>
+                    </div>
+                    <div class="machine-st-preview" id="machineStPreview">
+                        <p class="machine-no-file">Seleziona una scheda tecnica per visualizzarla.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALE AGGIUNGI / MODIFICA -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Aggiungi</h3>
+                <button class="modal-close" id="modalClose"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer">
+                <button class="modal-btn-cancel" id="modalCancel">Annulla</button>
+                <button class="modal-btn-save" id="modalSave">Salva</button>
+            </div>
+        </div>
+    </div>
+
+    <main class="main-content">
+        <div class="top-row">
+            <h2 class="page-title" id="pageTitle">Commesse</h2>
+            <div class="search-and-filter">
+                <div class="search-box">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" id="searchInput" placeholder="Cerca codice....">
+                </div>
+            </div>
+        </div>
+
+        <div class="pill-buttons-row">
+            <button class="pill-btn active" data-target="commesse">Commesse</button>
+            <button class="pill-btn" data-target="macchine">Macchine</button>
+            <button class="pill-btn" data-target="lavorazioni">Lavorazioni</button>
+            <button class="pill-btn" data-target="materie-prime">Materie Prime</button>
+        </div>
+
+        <div class="action-row">
+            <button class="add-btn" id="addBtn">Aggiungi</button>
+        </div>
+
+        <div class="cards-container" id="cards-container">
+            <p class="loading-msg">Caricamento...</p>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+    <script>
+        caricaSezione('commesse');
+    </script>
+
+    <script src="framework.js"></script>
+
+</body>
+</html>
