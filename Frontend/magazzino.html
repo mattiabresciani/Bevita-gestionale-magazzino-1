@@ -34,14 +34,6 @@
                             <span class="machine-info-label">Descrizione</span>
                             <span id="machineInfoDesc" class="machine-info-value">-</span>
                         </div>
-                        <div class="machine-info-row">
-                            <span class="machine-info-label">Quantità</span>
-                            <span id="machineInfoQty" class="machine-info-value">-</span>
-                        </div>
-                        <div class="machine-info-row">
-                            <span class="machine-info-label">Stato</span>
-                            <span id="machineInfoStato" class="machine-info-value">-</span>
-                        </div>
                     </div>
                     <div class="machine-photo-container">
                         <img id="machinePhoto" src="" alt="Foto macchina" class="machine-photo" style="display:none;">
@@ -54,6 +46,9 @@
                             <span class="bom-toolbar-title" id="bomTitle">
                                 <i class="fa-solid fa-diagram-project"></i> Albero Lavorazioni
                             </span>
+                            <button class="bom-add-root-btn" id="bomAddRootBtn" title="Aggiungi processo radice">
+                                <i class="fa-solid fa-plus"></i> Processo
+                            </button>
                             <button class="bom-fullscreen-btn" id="bomFullscreenBtn" title="Schermo intero">
                                 <i class="fa-solid fa-expand"></i>
                             </button>
@@ -70,6 +65,19 @@
                         <p class="machine-no-file">Seleziona una scheda tecnica per visualizzarla.</p>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VISTA OPERATIVA COMMESSA (drag&drop materiali → processi) -->
+    <div class="machine-overlay" id="commessaOverlay">
+        <div class="machine-panel">
+            <div class="machine-panel-header">
+                <h2 id="commessaPanelTitle">Commessa</h2>
+                <button class="machine-panel-close" id="commessaPanelClose"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="commessa-op-body" id="commessaOpBody">
+                <p class="machine-no-file">Caricamento...</p>
             </div>
         </div>
     </div>

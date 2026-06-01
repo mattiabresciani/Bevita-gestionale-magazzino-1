@@ -103,6 +103,7 @@ function renderCommesse(dati, container) {
                     '<span class="' + statoClass + '">' + (c.stato ?? '-') + '</span>' +
                 '</div>' +
                 '<div class="card-actions">' +
+                    '<button class="action-btn btn-grafo-commessa" title="Vista operativa (lavorazioni)"><i class="fa-solid fa-diagram-project"></i></button>' +
                     '<button class="action-btn edit-btn btn-modifica" title="Modifica"><i class="fa-solid fa-pen"></i></button>' +
                     '<button class="action-btn delete-btn btn-elimina" title="Elimina"><i class="fa-solid fa-trash"></i></button>' +
                 '</div>' +
@@ -114,6 +115,10 @@ function renderCommesse(dati, container) {
             '</div>';
         container.appendChild(div);
 
+        div.querySelector('.btn-grafo-commessa').addEventListener('click', function(e) {
+            e.stopPropagation();
+            apriVistaCommessa(c);
+        });
         div.querySelector('.accordion-header').addEventListener('click', function(e) {
             if (!e.target.closest('.card-actions')) {
                 toggleAccordion(this);
@@ -132,12 +137,10 @@ function renderMacchine(dati, container) {
         '<span class="th-arrow-spacer"></span>' +
         '<span class="th th-codice">Codice</span>' +
         '<span class="th th-desc">Descrizione</span>' +
-        '<span class="th th-qty">Qtà</span>' +
         '<span class="th th-act">Azioni</span>';
     container.appendChild(hdr);
 
     dati.forEach(m => {
-        const sc = statoClass(m.stato);
         const div = document.createElement('div');
         div.className = 'commessa-card-accordion';
         div.dataset.id = m.id ?? '';
@@ -149,10 +152,7 @@ function renderMacchine(dati, container) {
                 '<button class="item-code commessa-code machine-link-btn" title="Apri scheda">' + (m.codice ?? '-') + '</button>' +
                 '<div class="accordion-badges">' +
                     '<span class="badge">' + (m.descrizione ?? '-') + '</span>' +
-                    '<span class="badge badge-commessa">Comm. #' + (m.id_commessa ?? '-') + '</span>' +
-                    '<span class="badge ' + sc + '">' + (m.stato ?? '-') + '</span>' +
                 '</div>' +
-                '<span class="qty-display">' + (m.quantita ?? 0) + '</span>' +
                 '<div class="card-actions">' +
                     '<button class="action-btn edit-btn btn-modifica" title="Modifica"><i class="fa-solid fa-pen"></i></button>' +
                     '<button class="action-btn delete-btn btn-elimina" title="Elimina"><i class="fa-solid fa-trash"></i></button>' +
@@ -270,34 +270,78 @@ async function caricaMacchineCommessa(idCommessa) {
     if (!res) return;
     const macchine = await res.json();
 
-    if (!macchine.length) {
-        tree.innerHTML = '<p class="tree-empty">Nessuna macchina associata.</p>';
-        aggiornaAltezzaPanel(tree);
-        return;
-    }
-
     tree.innerHTML = '';
     const branch = document.createElement('div');
     branch.className = 'tree-branch';
     branch.appendChild(Object.assign(document.createElement('span'), { className: 'tree-line' }));
 
-    macchine.forEach(m => {
-        const item = document.createElement('div');
-        item.className = 'tree-item';
-        item.innerHTML =
-            '<span class="tree-dot">&#9632;</span>' +
-            '<button class="material-code machine-link-btn">' + (m.codice ?? '-') + '</button>' +
-            '<span class="material-quantity">' + (m.descrizione ?? '') + '</span>' +
-            '<span class="material-quantity badge ' + statoClass(m.stato) + '">' + (m.stato ?? '-') + '</span>' +
-            '<span class="material-quantity">Qt. ' + (m.quantita ?? '-') + '</span>';
-        item.querySelector('.machine-link-btn').addEventListener('click', function(e) {
-            e.stopPropagation();
-            apriSchedaMacchina(m);
+    if (!macchine.length) {
+        branch.insertAdjacentHTML('beforeend', '<p class="tree-empty">Nessuna macchina associata.</p>');
+    } else {
+        macchine.forEach(m => {
+            const item = document.createElement('div');
+            item.className = 'tree-item';
+            item.innerHTML =
+                '<span class="tree-dot">&#9632;</span>' +
+                '<button class="material-code machine-link-btn">' + (m.codice ?? '-') + '</button>' +
+                '<span class="material-quantity">' + (m.descrizione ?? '') + '</span>' +
+                '<span class="material-quantity badge ' + statoClass(m.stato) + '">' + (m.stato ?? '-') + '</span>' +
+                '<span class="material-quantity">Qt. ' + (m.quantita ?? '-') + '</span>' +
+                '<button class="action-btn delete-btn btn-rimuovi-mac" data-link-id="' + m.link_id + '" title="Rimuovi dalla commessa"><i class="fa-solid fa-trash"></i></button>';
+            item.querySelector('.machine-link-btn').addEventListener('click', function(e) {
+                e.stopPropagation();
+                apriSchedaMacchina(m);
+            });
+            item.querySelector('.btn-rimuovi-mac').addEventListener('click', async function() {
+                const r = await apiFetch('/commesse/' + idCommessa + '/macchine/' + this.dataset.linkId, 'DELETE');
+                if (r && r.ok) caricaMacchineCommessa(idCommessa);
+            });
+            branch.appendChild(item);
         });
-        branch.appendChild(item);
-    });
+    }
 
     tree.appendChild(branch);
+
+    // Form inline per associare una macchina dal catalogo
+    const catalogo = await apiFetch('/macchine');
+    const listaMac = (catalogo && catalogo.ok) ? await catalogo.json() : [];
+
+    const addRow = document.createElement('div');
+    addRow.className = 'tree-add-row';
+    const opzioni = listaMac.map(m =>
+        '<option value="' + m.id + '">' + (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') + '</option>'
+    ).join('');
+    addRow.innerHTML =
+        '<select id="mc-sel-' + idCommessa + '" class="tree-input tree-input-wide">' +
+            '<option value="">Seleziona macchina...</option>' + opzioni +
+        '</select>' +
+        '<input type="number" placeholder="Qtà" id="mc-qty-' + idCommessa + '" class="tree-input tree-input-sm" value="1" min="1" step="1">' +
+        '<select id="mc-stato-' + idCommessa + '" class="tree-input">' +
+            '<option value="IN_ATTESA">IN_ATTESA</option>' +
+            '<option value="IN_CORSO">IN_CORSO</option>' +
+            '<option value="COMPLETATA">COMPLETATA</option>' +
+        '</select>' +
+        '<button class="bom-confirm-btn" id="mc-add-' + idCommessa + '" title="Aggiungi macchina"><i class="fa-solid fa-plus"></i></button>';
+    tree.appendChild(addRow);
+
+    document.getElementById('mc-add-' + idCommessa).addEventListener('click', async function() {
+        const sel = document.getElementById('mc-sel-' + idCommessa);
+        const idMac = sel?.value;
+        if (!idMac) { sel?.focus(); return; }
+        const qty   = parseInt(document.getElementById('mc-qty-' + idCommessa).value) || 1;
+        const stato = document.getElementById('mc-stato-' + idCommessa).value;
+        this.disabled = true;
+        const r = await apiFetch('/commesse/' + idCommessa + '/macchine', 'POST',
+            { id_macchina: Number(idMac), quantita: qty, stato });
+        this.disabled = false;
+        if (r && (r.ok || r.status === 201)) {
+            caricaMacchineCommessa(idCommessa);
+        } else if (r) {
+            const err = await r.json().catch(() => ({}));
+            alert('Errore: ' + (err.errore || r.status));
+        }
+    });
+
     aggiornaAltezzaPanel(tree);
 }
 
@@ -426,11 +470,8 @@ const campiPerSezione = {
         { key: 'stato_chiusura',  label: 'Stato',           type: 'select', options: ['APERTA','CHIUSA'], valoreKey: 'stato' }
     ],
     'macchine': [
-        { key: 'codice',      label: 'Codice Macchina', type: 'text',   valoreKey: 'codice' },
-        { key: 'descrizione', label: 'Descrizione',     type: 'text',   valoreKey: 'descrizione' },
-        { key: 'quantita',    label: 'Quantità',        type: 'number', min: '0', valoreKey: 'quantita' },
-        { key: 'id_commessa', label: 'ID Commessa',     type: 'number', min: '1', valoreKey: 'id_commessa' },
-        { key: 'stato',       label: 'Stato',           type: 'select', options: ['IN_ATTESA','IN_CORSO','COMPLETATA'], valoreKey: 'stato' }
+        { key: 'codice',      label: 'Codice Macchina', type: 'text', valoreKey: 'codice' },
+        { key: 'descrizione', label: 'Descrizione',     type: 'text', valoreKey: 'descrizione' }
     ],
     'lavorazioni': [
         { key: 'descrizione', label: 'Descrizione',           type: 'text',   valoreKey: 'descrizione' },
@@ -569,8 +610,6 @@ function apriSchedaMacchina(m) {
     document.getElementById('machinePanelTitle').textContent  = m.codice ?? 'Scheda Macchina';
     document.getElementById('machineInfoCode').textContent    = m.codice ?? '-';
     document.getElementById('machineInfoDesc').textContent    = m.descrizione ?? '-';
-    document.getElementById('machineInfoQty').textContent     = m.quantita ?? '-';
-    document.getElementById('machineInfoStato').textContent   = m.stato ?? '-';
 
     const photo = document.getElementById('machinePhoto');
     photo.src = '';
@@ -691,6 +730,7 @@ async function caricaGrafoLavorazioni(idMacchina, codice) {
 
         const nodes = [], edges = [];
         let nc = 0;
+        _bomNodeMeta = {};   // visId → { tipo, dbId, descrizione }
 
         function addNodo(item, parentId) {
             const id = ++nc;
@@ -699,21 +739,16 @@ async function caricaGrafoLavorazioni(idMacchina, codice) {
             if (item.tipo === 'macchina') {
                 bg = '#1c1c1c'; border = '#e5006d'; fc = '#ffffff'; bw = 2;
                 label = (item.codice ?? '') + '\n' + (item.descrizione ?? '').substring(0, 24);
+                _bomNodeMeta[id] = { tipo: 'macchina', dbId: item.id };
             } else if (item.tipo === 'lavorazione') {
-                if (item.stato === 'COMPLETATA')      { bg = '#e8f5e9'; border = '#43a047'; fc = '#1b5e20'; }
-                else if (item.stato === 'IN_CORSO')   { bg = '#e3f2fd'; border = '#1e88e5'; fc = '#0d47a1'; }
-                else                                   { bg = '#f5f5f5'; border = '#bdbdbd'; fc = '#424242'; }
-                bw = 2;
-                label = (item.descrizione ?? '').substring(0, 28) + '\n[' + (item.stato ?? '-') + ']';
+                // Catalogo: struttura senza stato (lo stato è per commessa)
+                bg = '#eef1f6'; border = '#5e6b85'; fc = '#2b3550'; bw = 2;
+                label = (item.descrizione ?? '').substring(0, 30);
+                _bomNodeMeta[id] = { tipo: 'lavorazione', dbId: item.id, descrizione: item.descrizione };
             } else { // rich_mat
-                const ok = (item.quantita_stock ?? 0) >= (item.quantita_richiesta ?? 0);
-                bg = ok ? '#fff8e1' : '#fde8e8';
-                border = ok ? '#ffb300' : '#e53935';
-                fc = ok ? '#5d4037' : '#b71c1c';
-                bw = 1;
-                label = (item.codice ?? '-') +
-                    '\nRic.: ' + (item.quantita_richiesta ?? 1) +
-                    '  Stock: ' + (item.quantita_stock ?? 0);
+                bg = '#fff8e1'; border = '#ffb300'; fc = '#5d4037'; bw = 1;
+                label = (item.codice ?? '-') + '\nx' + (item.quantita_richiesta ?? 1);
+                _bomNodeMeta[id] = { tipo: 'rich_mat', dbId: item.id };
             }
 
             nodes.push({
@@ -740,6 +775,13 @@ async function caricaGrafoLavorazioni(idMacchina, codice) {
                 interaction: { hover: true, dragNodes: true, dragView: true, zoomView: true, navigationButtons: true, keyboard: false }
             }
         );
+        // Click su un nodo → menu di modifica struttura (catalogo editabile dal grafo)
+        _visNetwork.on('click', params => {
+            chiudiBomEditMenu();
+            if (!params.nodes.length) return;
+            const meta = _bomNodeMeta[params.nodes[0]];
+            if (meta) mostraBomEditMenu(meta, params.pointer.DOM);
+        });
         setTimeout(() => { if (_visNetwork) { _visNetwork.redraw(); _visNetwork.fit(); } }, 300);
 
     } catch (err) {
@@ -747,9 +789,127 @@ async function caricaGrafoLavorazioni(idMacchina, codice) {
     }
 }
 
+// ── EDITING STRUTTURA CATALOGO (dal grafo) ────────────────────────────────────
+
+let _bomNodeMeta = {};
+
+function ricaricaGrafoCorrente() {
+    if (_currentMacchina) caricaGrafoLavorazioni(_currentMacchina.id, _currentMacchina.codice);
+}
+
+function chiudiBomEditMenu() {
+    const ex = document.getElementById('bomEditPanel');
+    if (ex) ex.remove();
+}
+
+function mostraBomEditMenu(meta, domPos) {
+    const graph = document.getElementById('machineBomGraph');
+    const panel = document.createElement('div');
+    panel.id = 'bomEditPanel';
+    panel.className = 'bom-edit-panel';
+
+    let html = '';
+    if (meta.tipo === 'macchina') {
+        html = '<button data-act="add-root"><i class="fa-solid fa-plus"></i> Processo radice</button>';
+    } else if (meta.tipo === 'lavorazione') {
+        html =
+            '<button data-act="add-sub"><i class="fa-solid fa-plus"></i> Sotto-processo</button>' +
+            '<button data-act="add-mat"><i class="fa-solid fa-cube"></i> Materiale</button>' +
+            '<button data-act="rename"><i class="fa-solid fa-pen"></i> Rinomina</button>' +
+            '<button data-act="del-lav" class="danger"><i class="fa-solid fa-trash"></i> Elimina</button>';
+    } else { // rich_mat
+        html = '<button data-act="del-mat" class="danger"><i class="fa-solid fa-trash"></i> Rimuovi materiale</button>';
+    }
+    panel.innerHTML = html;
+
+    graph.appendChild(panel);
+    // posiziona vicino al click, dentro il container
+    const maxX = graph.clientWidth - panel.offsetWidth - 8;
+    const maxY = graph.clientHeight - panel.offsetHeight - 8;
+    panel.style.left = Math.max(8, Math.min(domPos.x, maxX)) + 'px';
+    panel.style.top  = Math.max(8, Math.min(domPos.y, maxY)) + 'px';
+
+    panel.querySelectorAll('button').forEach(b => {
+        b.addEventListener('click', () => gestisciAzioneBom(b.dataset.act, meta));
+    });
+}
+
+async function gestisciAzioneBom(act, meta) {
+    chiudiBomEditMenu();
+    const idMac = _currentMacchina?.id;
+    if (!idMac) return;
+
+    if (act === 'add-root' || act === 'add-sub') {
+        const desc = prompt('Descrizione del processo:');
+        if (!desc) return;
+        const body = { id_macchina: idMac, descrizione: desc };
+        if (act === 'add-sub') body.tav_padre = meta.dbId;
+        await apiFetch('/lavorazioni', 'POST', body);
+        ricaricaGrafoCorrente();
+
+    } else if (act === 'rename') {
+        const desc = prompt('Nuova descrizione:', meta.descrizione ?? '');
+        if (desc === null) return;
+        await apiFetch('/lavorazioni/' + meta.dbId, 'PUT', { descrizione: desc });
+        ricaricaGrafoCorrente();
+
+    } else if (act === 'del-lav') {
+        if (!confirm('Eliminare il processo "' + (meta.descrizione ?? '') + '" e i suoi materiali?')) return;
+        await apiFetch('/lavorazioni/' + meta.dbId, 'DELETE');
+        ricaricaGrafoCorrente();
+
+    } else if (act === 'del-mat') {
+        if (!confirm('Rimuovere questo materiale dal processo?')) return;
+        await apiFetch('/rich_mat/' + meta.dbId, 'DELETE');
+        ricaricaGrafoCorrente();
+
+    } else if (act === 'add-mat') {
+        apriFormMaterialeProcesso(meta.dbId);
+    }
+}
+
+async function apriFormMaterialeProcesso(idLavorazione) {
+    const catalogo = await apiFetch('/materiale');
+    const lista = (catalogo && catalogo.ok) ? await catalogo.json() : [];
+
+    const graph = document.getElementById('machineBomGraph');
+    const panel = document.createElement('div');
+    panel.id = 'bomEditPanel';
+    panel.className = 'bom-edit-panel bom-edit-form';
+    const opts = lista.map(m =>
+        '<option value="' + m.id + '">' + (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') + '</option>'
+    ).join('');
+    panel.innerHTML =
+        '<select id="bomMatSel" class="tree-input tree-input-wide"><option value="">Materiale...</option>' + opts + '</select>' +
+        '<input type="number" id="bomMatQty" class="tree-input tree-input-sm" value="1" min="0.01" step="0.01">' +
+        '<button class="bom-confirm-btn" id="bomMatAdd"><i class="fa-solid fa-plus"></i></button>';
+    graph.appendChild(panel);
+    panel.style.left = '8px';
+    panel.style.top  = '8px';
+
+    document.getElementById('bomMatAdd').addEventListener('click', async function() {
+        const idMat = document.getElementById('bomMatSel').value;
+        if (!idMat) return;
+        const qty = parseFloat(document.getElementById('bomMatQty').value) || 1;
+        await apiFetch('/lavorazioni/' + idLavorazione + '/rich_mat', 'POST',
+            { id_materiale: Number(idMat), quantita: qty });
+        chiudiBomEditMenu();
+        ricaricaGrafoCorrente();
+    });
+}
+
+document.getElementById('bomAddRootBtn').addEventListener('click', async function() {
+    if (!_currentMacchina) return;
+    const desc = prompt('Descrizione del processo radice:');
+    if (!desc) return;
+    await apiFetch('/lavorazioni', 'POST', { id_macchina: _currentMacchina.id, descrizione: desc });
+    ricaricaGrafoCorrente();
+});
+
 function chiudiSchedaMacchina() {
     if (document.fullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
     document.getElementById('machineOverlay').classList.remove('open');
+    chiudiBomEditMenu();
     _currentMacchina = null;
     _blobUrls.forEach(u => URL.revokeObjectURL(u));
     _blobUrls = [];
@@ -776,3 +936,160 @@ function _onBomFullscreenChange() {
     if (btn)  btn.title      = isFS ? 'Esci da schermo intero' : 'Schermo intero';
     if (_visNetwork) setTimeout(() => { _visNetwork.redraw(); _visNetwork.fit(); }, 80);
 }
+
+// ── VISTA OPERATIVA COMMESSA (drag&drop materiali → processi) ─────────────────
+
+let _commessaCorrente = null;
+
+function procStatoClass(stato) {
+    if (stato === 'COMPLETATA') return 'proc-completata';
+    if (stato === 'IN_CORSO')   return 'proc-corso';
+    return 'proc-attesa';
+}
+
+function apriVistaCommessa(c) {
+    _commessaCorrente = c.id;
+    document.getElementById('commessaPanelTitle').textContent =
+        'Commessa ' + (c.codice ?? '#' + c.id) + (c.descrizione ? ' — ' + c.descrizione : '');
+    document.getElementById('commessaOpBody').innerHTML = '<p class="machine-no-file">Caricamento...</p>';
+    document.getElementById('commessaOverlay').classList.add('open');
+    caricaAlberoCommessa(c.id);
+}
+
+function chiudiVistaCommessa() {
+    document.getElementById('commessaOverlay').classList.remove('open');
+    _commessaCorrente = null;
+}
+
+async function caricaAlberoCommessa(idCommessa) {
+    const body = document.getElementById('commessaOpBody');
+    const res = await apiFetch('/commesse/' + idCommessa + '/albero');
+    if (!res || !res.ok) {
+        body.innerHTML = '<p class="machine-no-file">Errore nel caricamento.</p>';
+        return;
+    }
+    const albero = await res.json();
+
+    if (!albero.macchine || !albero.macchine.length) {
+        body.innerHTML = '<p class="machine-no-file"><i class="fa-solid fa-diagram-project" style="opacity:.3"></i><br>Nessuna macchina associata alla commessa.</p>';
+        return;
+    }
+
+    body.innerHTML = '';
+    albero.macchine.forEach(m => {
+        const card = document.createElement('div');
+        card.className = 'op-macchina';
+        card.innerHTML =
+            '<div class="op-macchina-header">' +
+                '<i class="fa-solid fa-gear"></i> ' +
+                '<span class="op-macchina-codice">' + (m.codice ?? '-') + '</span>' +
+                '<span class="op-macchina-desc">' + (m.descrizione ?? '') + '</span>' +
+                '<span class="badge badge-commessa">×' + (m.quantita ?? 1) + '</span>' +
+            '</div>';
+        const procWrap = document.createElement('div');
+        procWrap.className = 'op-processi';
+        if (!m.lavorazioni || !m.lavorazioni.length) {
+            procWrap.innerHTML = '<p class="tree-empty">Questa macchina non ha lavorazioni nel catalogo.</p>';
+        } else {
+            m.lavorazioni.forEach(lav => renderProcessoOperativo(lav, m.commessa_macchina_id, procWrap, 0));
+        }
+        card.appendChild(procWrap);
+        body.appendChild(card);
+    });
+}
+
+function renderProcessoOperativo(lav, cmId, container, depth) {
+    const box = document.createElement('div');
+    box.className = 'op-processo';
+    box.style.marginLeft = (depth * 28) + 'px';
+    if (lav.bloccato) box.classList.add('op-processo-bloccato');
+
+    const statoLabel = lav.bloccato ? 'BLOCCATO' : lav.stato;
+    const dropZone = document.createElement('div');
+    dropZone.className = 'op-proc-node ' + procStatoClass(lav.stato);
+    dropZone.innerHTML =
+        '<span class="op-proc-nome"><i class="fa-solid ' + (lav.bloccato ? 'fa-lock' : 'fa-screwdriver-wrench') + '"></i> ' +
+            (lav.descrizione ?? 'Processo') + '</span>' +
+        '<span class="op-proc-stato">' + statoLabel + '</span>';
+    box.appendChild(dropZone);
+
+    // Materiali richiesti: chip trascinabili nel nodo del processo
+    if (lav.rich_mat && lav.rich_mat.length) {
+        const matWrap = document.createElement('div');
+        matWrap.className = 'op-materiali';
+        lav.rich_mat.forEach(rm => {
+            const completo = (rm.quantita_fornita >= rm.target);
+            const senzaStock = (rm.quantita_stock ?? 0) <= 0;
+            const chip = document.createElement('div');
+            chip.className = 'op-chip' + (completo ? ' op-chip-ok' : '');
+            const trascinabile = !lav.bloccato && !completo && !senzaStock;
+            chip.draggable = trascinabile;
+            chip.dataset.cm = cmId;
+            chip.dataset.rm = rm.rich_mat_id;
+            chip.innerHTML =
+                '<i class="fa-solid fa-grip-vertical op-chip-grip"></i>' +
+                '<span class="op-chip-cod">' + (rm.codice ?? '-') + '</span>' +
+                '<span class="op-chip-count">' + rm.quantita_fornita + '/' + rm.target + (completo ? ' ✓' : '') + '</span>' +
+                '<span class="op-chip-stock' + (senzaStock ? ' qty-danger' : '') + '">stock ' + (rm.quantita_stock ?? 0) + '</span>' +
+                (rm.quantita_fornita > 0 ? '<button class="op-chip-undo" title="Restituisci 1 al magazzino"><i class="fa-solid fa-rotate-left"></i></button>' : '');
+
+            if (trascinabile) {
+                chip.addEventListener('dragstart', ev => {
+                    ev.dataTransfer.setData('text/plain', JSON.stringify({ cm: cmId, rm: rm.rich_mat_id }));
+                    ev.dataTransfer.effectAllowed = 'move';
+                    chip.classList.add('op-chip-dragging');
+                });
+                chip.addEventListener('dragend', () => chip.classList.remove('op-chip-dragging'));
+            }
+            const undoBtn = chip.querySelector('.op-chip-undo');
+            if (undoBtn) undoBtn.addEventListener('click', () => restituisciMateriale(cmId, rm.rich_mat_id));
+            matWrap.appendChild(chip);
+        });
+        box.appendChild(matWrap);
+    }
+
+    // Il nodo processo è la zona di rilascio
+    if (!lav.bloccato) {
+        dropZone.addEventListener('dragover', ev => { ev.preventDefault(); dropZone.classList.add('op-proc-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('op-proc-over'));
+        dropZone.addEventListener('drop', ev => {
+            ev.preventDefault();
+            dropZone.classList.remove('op-proc-over');
+            let data;
+            try { data = JSON.parse(ev.dataTransfer.getData('text/plain')); } catch { return; }
+            if (data && data.rm) fornisciMateriale(data.cm, data.rm);
+        });
+    }
+
+    container.appendChild(box);
+
+    // Figli (processi successivi nella sequenza)
+    if (lav.figli && lav.figli.length) {
+        lav.figli.forEach(f => renderProcessoOperativo(f, cmId, container, depth + 1));
+    }
+}
+
+async function fornisciMateriale(cmId, rmId) {
+    const res = await apiFetch('/commessa-macchine/' + cmId + '/rich_mat/' + rmId + '/fornisci', 'POST', {});
+    if (res && res.ok) {
+        if (_commessaCorrente) caricaAlberoCommessa(_commessaCorrente);
+    } else if (res) {
+        const err = await res.json().catch(() => ({}));
+        alert('Impossibile fornire: ' + (err.errore || res.status));
+    }
+}
+
+async function restituisciMateriale(cmId, rmId) {
+    const res = await apiFetch('/commessa-macchine/' + cmId + '/rich_mat/' + rmId + '/restituisci', 'POST', {});
+    if (res && res.ok) {
+        if (_commessaCorrente) caricaAlberoCommessa(_commessaCorrente);
+    } else if (res) {
+        const err = await res.json().catch(() => ({}));
+        alert('Impossibile restituire: ' + (err.errore || res.status));
+    }
+}
+
+document.getElementById('commessaPanelClose').addEventListener('click', chiudiVistaCommessa);
+document.getElementById('commessaOverlay').addEventListener('click', function(e) {
+    if (e.target === this) chiudiVistaCommessa();
+});
