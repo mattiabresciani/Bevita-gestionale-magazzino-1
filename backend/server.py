@@ -48,7 +48,7 @@ class Macchina(db.Model):
     id          = db.Column(db.Integer, primary_key=True)
     codice      = db.Column(db.String(50))
     descrizione = db.Column(db.String(255))
-    id_commessa = db.Column(db.Integer, db.ForeignKey('commesse.id'), nullable=False)
+    id_commessa = db.Column(db.Integer, db.ForeignKey('commesse.id'), nullable=True)
     quantita    = db.Column(db.Integer, default=1)
     stato       = db.Column(db.Enum('IN_ATTESA', 'IN_CORSO', 'COMPLETATA'), default='IN_ATTESA')
 
