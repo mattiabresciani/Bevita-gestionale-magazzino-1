@@ -61,7 +61,7 @@ async function caricaSezione(sezione) {
 
     const endpoints = {
         'commesse': '/commesse', 'macchine': '/macchine',
-        'lavorazioni': '/lavorazioni', 'materie-prime': '/materiale'
+        'lavorazioni': '/processi', 'materie-prime': '/materiale'
     };
     const res = await apiFetch(endpoints[sezione]);
     if (!res) return;
@@ -180,41 +180,31 @@ function renderMacchine(dati, container) {
 
 // ── RENDER LAVORAZIONI ────────────────────────────────────────────────────────
 
+// Catalogo CONDIVISO dei processi (solo descrizione). Le macchine li riusano nel grafo.
 function renderLavorazioni(dati, container) {
-    dati.forEach(l => {
-        const sc = statoClass(l.stato);
+    const hdr = document.createElement('div');
+    hdr.className = 'cards-col-header header-mat';
+    hdr.innerHTML =
+        '<span class="th th-desc">Processo</span>' +
+        '<span class="th th-act">Azioni</span>';
+    container.appendChild(hdr);
+
+    dati.forEach(p => {
         const div = document.createElement('div');
-        div.className = 'commessa-card-accordion';
-        div.dataset.id = l.id ?? '';
-        div.dataset.record = JSON.stringify(l);
+        div.className = 'commessa-card';
+        div.dataset.id = p.id ?? '';
+        div.dataset.record = JSON.stringify(p);
         div.dataset.sezione = 'lavorazioni';
         div.innerHTML =
-            '<div class="accordion-header">' +
-                '<span class="accordion-arrow">&#x203A;</span>' +
-                '<span class="item-code commessa-code">' + (l.descrizione ?? '-') + '</span>' +
-                '<div class="accordion-badges">' +
-                    '<span class="badge badge-commessa">Mac. #' + (l.id_macchina ?? '-') + '</span>' +
-                    (l.tav_padre ? '<span class="badge">Padre: #' + l.tav_padre + '</span>' : '<span class="badge">Radice</span>') +
-                    '<span class="badge ' + sc + '">' + (l.stato ?? '-') + '</span>' +
-                '</div>' +
-                '<div class="card-actions">' +
-                    '<button class="action-btn edit-btn btn-modifica" title="Modifica"><i class="fa-solid fa-pen"></i></button>' +
-                    '<button class="action-btn delete-btn btn-elimina" title="Elimina"><i class="fa-solid fa-trash"></i></button>' +
-                '</div>' +
+            '<div class="card-left">' +
+                '<span class="item-code commessa-code">' + (p.descrizione ?? '-') + '</span>' +
             '</div>' +
-            '<div class="accordion-panel">' +
-                '<div class="tree-container" id="tree-lavorazione-' + l.id + '">' +
-                    '<p class="tree-empty">Apri per vedere i materiali richiesti.</p>' +
-                '</div>' +
+            '<div class="card-right"></div>' +
+            '<div class="card-actions card-actions-right">' +
+                '<button class="action-btn edit-btn btn-modifica" title="Modifica"><i class="fa-solid fa-pen"></i></button>' +
+                '<button class="action-btn delete-btn btn-elimina" title="Elimina"><i class="fa-solid fa-trash"></i></button>' +
             '</div>';
         container.appendChild(div);
-
-        div.querySelector('.accordion-header').addEventListener('click', function(e) {
-            if (!e.target.closest('.card-actions')) {
-                toggleAccordion(this);
-                if (div.classList.contains('active')) caricaRichMatLavorazione(l.id);
-            }
-        });
     });
 }
 
@@ -371,90 +361,11 @@ async function caricaLavorazioniMacchina(idMacchina) {
         item.innerHTML =
             '<span class="tree-dot">&#9632;</span>' +
             '<span class="material-code">' + (l.descrizione ?? '-') + '</span>' +
-            (l.tav_padre ? '<span class="material-quantity">Padre: #' + l.tav_padre + '</span>' : '<span class="material-quantity">Radice</span>') +
-            '<span class="material-quantity badge ' + statoClass(l.stato) + '">' + (l.stato ?? '-') + '</span>';
+            (l.tav_padre ? '<span class="material-quantity">dopo #' + l.tav_padre + '</span>' : '<span class="material-quantity">iniziale</span>');
         branch.appendChild(item);
     });
 
     tree.appendChild(branch);
-    aggiornaAltezzaPanel(tree);
-}
-
-async function caricaRichMatLavorazione(idLavorazione) {
-    const tree = document.getElementById('tree-lavorazione-' + idLavorazione);
-    if (!tree) return;
-    tree.innerHTML = '<p class="tree-empty">Caricamento...</p>';
-
-    const res = await apiFetch('/lavorazioni/' + idLavorazione + '/rich_mat');
-    if (!res) return;
-    const materiali = await res.json();
-
-    tree.innerHTML = '';
-
-    if (materiali.length) {
-        const branch = document.createElement('div');
-        branch.className = 'tree-branch';
-        branch.appendChild(Object.assign(document.createElement('span'), { className: 'tree-line' }));
-
-        materiali.forEach(m => {
-            const sufficiente = (m.quantita_stock ?? 0) >= (m.quantita_richiesta ?? 0);
-            const stockClass  = sufficiente ? '' : 'qty-danger';
-            const item = document.createElement('div');
-            item.className = 'tree-item';
-            item.innerHTML =
-                '<span class="tree-dot">&#9632;</span>' +
-                '<span class="material-code">' + (m.codice ?? '-') + '</span>' +
-                '<span class="material-quantity">' + (m.descrizione ?? '') + '</span>' +
-                '<span class="material-quantity">Ric.: <b>' + (m.quantita_richiesta ?? 1) + '</b></span>' +
-                '<span class="material-quantity ' + stockClass + '">Stock: <b>' + (m.quantita_stock ?? 0) + '</b></span>' +
-                '<button class="action-btn delete-btn btn-rimuovi-mat" data-id="' + m.id + '" title="Rimuovi">' +
-                    '<i class="fa-solid fa-trash"></i>' +
-                '</button>';
-            item.querySelector('.btn-rimuovi-mat').addEventListener('click', async function() {
-                const r = await apiFetch('/rich_mat/' + this.dataset.id, 'DELETE');
-                if (r && r.ok) caricaRichMatLavorazione(idLavorazione);
-            });
-            branch.appendChild(item);
-        });
-        tree.appendChild(branch);
-    } else {
-        tree.innerHTML = '<p class="tree-empty">Nessun materiale richiesto.</p>';
-    }
-
-    // Form inline — select dal catalogo materiali
-    const catalogo = await apiFetch('/materiale');
-    const listaMat = (catalogo && catalogo.ok) ? await catalogo.json() : [];
-
-    const addRow = document.createElement('div');
-    addRow.className = 'tree-add-row';
-    const opzioni = listaMat.map(m =>
-        '<option value="' + m.id + '">' + (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') + ' [Stock: ' + (m.quantita ?? 0) + ']</option>'
-    ).join('');
-    addRow.innerHTML =
-        '<select id="rm-sel-' + idLavorazione + '" class="tree-input tree-input-wide">' +
-            '<option value="">Seleziona materiale...</option>' + opzioni +
-        '</select>' +
-        '<input type="number" placeholder="Qt. richiesta" id="rm-qty-' + idLavorazione + '" class="tree-input tree-input-sm" value="1" min="0.01" step="0.01">' +
-        '<button class="bom-confirm-btn" id="rm-add-' + idLavorazione + '" title="Aggiungi"><i class="fa-solid fa-plus"></i></button>';
-    tree.appendChild(addRow);
-
-    document.getElementById('rm-add-' + idLavorazione).addEventListener('click', async function() {
-        const sel = document.getElementById('rm-sel-' + idLavorazione);
-        const idMat = sel?.value;
-        if (!idMat) { sel?.focus(); return; }
-        const qty = parseFloat(document.getElementById('rm-qty-' + idLavorazione).value) || 1;
-        this.disabled = true;
-        const r = await apiFetch('/lavorazioni/' + idLavorazione + '/rich_mat', 'POST',
-            { id_materiale: Number(idMat), quantita: qty });
-        this.disabled = false;
-        if (r && (r.ok || r.status === 201)) {
-            caricaRichMatLavorazione(idLavorazione);
-        } else if (r) {
-            const err = await r.json().catch(() => ({}));
-            alert('Errore: ' + (err.errore || r.status));
-        }
-    });
-
     aggiornaAltezzaPanel(tree);
 }
 
@@ -474,10 +385,7 @@ const campiPerSezione = {
         { key: 'descrizione', label: 'Descrizione',     type: 'text', valoreKey: 'descrizione' }
     ],
     'lavorazioni': [
-        { key: 'descrizione', label: 'Descrizione',           type: 'text',   valoreKey: 'descrizione' },
-        { key: 'id_macchina', label: 'ID Macchina',           type: 'number', min: '1', valoreKey: 'id_macchina' },
-        { key: 'tav_padre',   label: 'ID Lavorazione Padre',  type: 'number', min: '0', valoreKey: 'tav_padre', optional: true },
-        { key: 'stato',       label: 'Stato',                 type: 'select', options: ['IN_ATTESA','IN_CORSO','COMPLETATA'], valoreKey: 'stato' }
+        { key: 'descrizione', label: 'Nome processo', type: 'text', valoreKey: 'descrizione' }
     ],
     'materie-prime': [
         { key: 'codice',      label: 'Codice Materiale', type: 'text',   valoreKey: 'codice' },
@@ -548,7 +456,7 @@ document.getElementById('modalSave').addEventListener('click', async () => {
 
     if (errore) { alert(errore); return; }
 
-    const endpointMap = { 'commesse': '/commesse', 'macchine': '/macchine', 'lavorazioni': '/lavorazioni', 'materie-prime': '/materiale' };
+    const endpointMap = { 'commesse': '/commesse', 'macchine': '/macchine', 'lavorazioni': '/processi', 'materie-prime': '/materiale' };
     const endpoint = endpointMap[sezioneCorrente];
 
     const res = modalMode === 'add'
@@ -592,7 +500,7 @@ function attaccaEventiCard() {
 async function eliminaElemento(sezione, label, id) {
     if (!confirm('Eliminare "' + label + '"?')) return;
     if (!id) { alert('ID non disponibile.'); return; }
-    const endpointMap = { 'commesse': '/commesse', 'macchine': '/macchine', 'lavorazioni': '/lavorazioni', 'materie-prime': '/materiale' };
+    const endpointMap = { 'commesse': '/commesse', 'macchine': '/macchine', 'lavorazioni': '/processi', 'materie-prime': '/materiale' };
     const res = await apiFetch(endpointMap[sezione] + '/' + id, 'DELETE');
     if (res && res.ok) caricaSezione(sezioneCorrente);
     else alert('Errore nell\'eliminazione.');
@@ -692,8 +600,10 @@ async function caricaGrafoLavorazioni(idMacchina, codice) {
     if (!res || !res.ok) { container.innerHTML = '<p class="machine-no-file">Errore caricamento albero.</p>'; return; }
     const tree = await res.json();
 
-    if (!tree.lavorazioni || !tree.lavorazioni.length) {
-        container.innerHTML = '<p class="machine-no-file"><i class="fa-solid fa-diagram-project" style="opacity:.3"></i><br>Nessuna lavorazione associata.</p>';
+    const haContenuto = (tree.lavorazioni && tree.lavorazioni.length) ||
+                        (tree.materiali_diretti && tree.materiali_diretti.length);
+    if (!haContenuto) {
+        container.innerHTML = '<p class="machine-no-file"><i class="fa-solid fa-diagram-project" style="opacity:.3"></i><br>Nessun elemento. Usa "+ Processo" per iniziare.</p>';
         return;
     }
 
@@ -707,7 +617,7 @@ async function caricaGrafoLavorazioni(idMacchina, codice) {
         let _maxY  = 0;
 
         function getChildren(item) {
-            if (item.tipo === 'macchina')    return item.lavorazioni || [];
+            if (item.tipo === 'macchina')    return [...(item.lavorazioni || []), ...(item.materiali_diretti || [])];
             if (item.tipo === 'lavorazione') return [...(item.figli || []), ...(item.rich_mat || [])];
             return [];
         }
@@ -810,12 +720,13 @@ function mostraBomEditMenu(meta, domPos) {
 
     let html = '';
     if (meta.tipo === 'macchina') {
-        html = '<button data-act="add-root"><i class="fa-solid fa-plus"></i> Processo radice</button>';
+        html =
+            '<button data-act="add-proc"><i class="fa-solid fa-plus"></i> Processo</button>' +
+            '<button data-act="add-mat-dir"><i class="fa-solid fa-cube"></i> Materiale diretto</button>';
     } else if (meta.tipo === 'lavorazione') {
         html =
             '<button data-act="add-sub"><i class="fa-solid fa-plus"></i> Sotto-processo</button>' +
             '<button data-act="add-mat"><i class="fa-solid fa-cube"></i> Materiale</button>' +
-            '<button data-act="rename"><i class="fa-solid fa-pen"></i> Rinomina</button>' +
             '<button data-act="del-lav" class="danger"><i class="fa-solid fa-trash"></i> Elimina</button>';
     } else { // rich_mat
         html = '<button data-act="del-mat" class="danger"><i class="fa-solid fa-trash"></i> Rimuovi materiale</button>';
@@ -834,76 +745,125 @@ function mostraBomEditMenu(meta, domPos) {
     });
 }
 
-async function gestisciAzioneBom(act, meta) {
+function gestisciAzioneBom(act, meta) {
     chiudiBomEditMenu();
     const idMac = _currentMacchina?.id;
     if (!idMac) return;
 
-    if (act === 'add-root' || act === 'add-sub') {
-        const desc = prompt('Descrizione del processo:');
-        if (!desc) return;
-        const body = { id_macchina: idMac, descrizione: desc };
-        if (act === 'add-sub') body.tav_padre = meta.dbId;
-        await apiFetch('/lavorazioni', 'POST', body);
-        ricaricaGrafoCorrente();
+    if (act === 'add-proc')         apriModaleElemento(idMac, { tipo: 'processo' });
+    else if (act === 'add-sub')     apriModaleElemento(idMac, { tipo: 'processo', parent: meta.dbId });
+    else if (act === 'add-mat')     apriModaleElemento(idMac, { tipo: 'materia', posizione: 'sotto', targetLav: meta.dbId });
+    else if (act === 'add-mat-dir') apriModaleElemento(idMac, { tipo: 'materia', posizione: 'diretto' });
+    else if (act === 'del-lav')     eliminaProcessoBom(meta);
+    else if (act === 'del-mat')     eliminaMaterialeBom(meta);
+}
 
-    } else if (act === 'rename') {
-        const desc = prompt('Nuova descrizione:', meta.descrizione ?? '');
-        if (desc === null) return;
-        await apiFetch('/lavorazioni/' + meta.dbId, 'PUT', { descrizione: desc });
-        ricaricaGrafoCorrente();
+// Modale unica: aggiunge un PROCESSO (dal catalogo) o una MATERIA PRIMA (sotto un processo o diretta)
+async function apriModaleElemento(idMac, opts = {}) {
+    const [pr, ma, lv] = await Promise.all([
+        apiFetch('/processi'), apiFetch('/materiale'), apiFetch('/macchine/' + idMac + '/lavorazioni')
+    ]);
+    const processi  = (pr && pr.ok) ? await pr.json() : [];
+    const materiali = (ma && ma.ok) ? await ma.json() : [];
+    const lavs      = (lv && lv.ok) ? await lv.json() : [];
 
-    } else if (act === 'del-lav') {
-        if (!confirm('Eliminare il processo "' + (meta.descrizione ?? '') + '" e i suoi materiali?')) return;
-        await apiFetch('/lavorazioni/' + meta.dbId, 'DELETE');
-        ricaricaGrafoCorrente();
+    const procOpts = processi.map(p => '<option value="' + p.id + '">' + (p.descrizione ?? '-') + '</option>').join('');
+    const matOpts  = materiali.map(m => '<option value="' + m.id + '">' + (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') + '</option>').join('');
+    const lavOpts  = lavs.map(l => '<option value="' + l.id + '">' + (l.descrizione ?? ('#' + l.id)) + '</option>').join('');
 
-    } else if (act === 'del-mat') {
-        if (!confirm('Rimuovere questo materiale dal processo?')) return;
-        await apiFetch('/rich_mat/' + meta.dbId, 'DELETE');
-        ricaricaGrafoCorrente();
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay open';
+    ov.innerHTML =
+        '<div class="modal"><div class="modal-header"><h3>Aggiungi elemento</h3>' +
+        '<button class="modal-close"><i class="fa-solid fa-xmark"></i></button></div>' +
+        '<div class="modal-body">' +
+            '<div class="modal-field"><label>Tipo</label><select id="el_tipo">' +
+                '<option value="processo">Processo</option><option value="materia">Materia prima</option></select></div>' +
+            '<div class="modal-field el-proc"><label>Processo (dal catalogo Lavorazioni)</label>' +
+                '<select id="el_proc"><option value="">Seleziona...</option>' + procOpts + '</select></div>' +
+            '<div class="modal-field el-proc"><label>Processo precedente</label>' +
+                '<select id="el_prec"><option value="">— Nessuno (iniziale) —</option>' + lavOpts + '</select></div>' +
+            '<div class="modal-field el-mat"><label>Materia prima</label>' +
+                '<select id="el_mat"><option value="">Seleziona...</option>' + matOpts + '</select></div>' +
+            '<div class="modal-field el-mat"><label>Quantità</label>' +
+                '<input type="number" id="el_qty" value="1" min="0.01" step="0.01"></div>' +
+            '<div class="modal-field el-mat"><label>Posizione</label>' +
+                '<select id="el_pos"><option value="diretto">Diretta sulla macchina</option><option value="sotto">Sotto un processo</option></select></div>' +
+            '<div class="modal-field el-mat el-sotto"><label>Processo</label>' +
+                '<select id="el_lav"><option value="">Seleziona...</option>' + lavOpts + '</select></div>' +
+        '</div>' +
+        '<div class="modal-footer"><button class="modal-btn-cancel">Annulla</button>' +
+        '<button class="modal-btn-save">Salva</button></div></div>';
+    document.body.appendChild(ov);
 
-    } else if (act === 'add-mat') {
-        apriFormMaterialeProcesso(meta.dbId);
+    const $  = s => ov.querySelector(s);
+    const hide = (sel, h) => ov.querySelectorAll(sel).forEach(e => e.style.display = h ? 'none' : '');
+    function aggiorna() {
+        const tipo = $('#el_tipo').value;
+        hide('.el-proc', tipo !== 'processo');
+        hide('.el-mat',  tipo !== 'materia');
+        if (tipo === 'materia') hide('.el-sotto', $('#el_pos').value !== 'sotto');
     }
-}
+    $('#el_tipo').addEventListener('change', aggiorna);
+    $('#el_pos').addEventListener('change', aggiorna);
 
-async function apriFormMaterialeProcesso(idLavorazione) {
-    const catalogo = await apiFetch('/materiale');
-    const lista = (catalogo && catalogo.ok) ? await catalogo.json() : [];
+    if (opts.tipo)      $('#el_tipo').value = opts.tipo;
+    if (opts.parent)    $('#el_prec').value = opts.parent;
+    if (opts.posizione) $('#el_pos').value  = opts.posizione;
+    if (opts.targetLav) $('#el_lav').value  = opts.targetLav;
+    aggiorna();
 
-    const graph = document.getElementById('machineBomGraph');
-    const panel = document.createElement('div');
-    panel.id = 'bomEditPanel';
-    panel.className = 'bom-edit-panel bom-edit-form';
-    const opts = lista.map(m =>
-        '<option value="' + m.id + '">' + (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') + '</option>'
-    ).join('');
-    panel.innerHTML =
-        '<select id="bomMatSel" class="tree-input tree-input-wide"><option value="">Materiale...</option>' + opts + '</select>' +
-        '<input type="number" id="bomMatQty" class="tree-input tree-input-sm" value="1" min="0.01" step="0.01">' +
-        '<button class="bom-confirm-btn" id="bomMatAdd"><i class="fa-solid fa-plus"></i></button>';
-    graph.appendChild(panel);
-    panel.style.left = '8px';
-    panel.style.top  = '8px';
+    const chiudi = () => ov.remove();
+    $('.modal-close').addEventListener('click', chiudi);
+    $('.modal-btn-cancel').addEventListener('click', chiudi);
+    ov.addEventListener('click', e => { if (e.target === ov) chiudi(); });
 
-    document.getElementById('bomMatAdd').addEventListener('click', async function() {
-        const idMat = document.getElementById('bomMatSel').value;
-        if (!idMat) return;
-        const qty = parseFloat(document.getElementById('bomMatQty').value) || 1;
-        await apiFetch('/lavorazioni/' + idLavorazione + '/rich_mat', 'POST',
-            { id_materiale: Number(idMat), quantita: qty });
-        chiudiBomEditMenu();
-        ricaricaGrafoCorrente();
+    $('.modal-btn-save').addEventListener('click', async () => {
+        const tipo = $('#el_tipo').value;
+        let r;
+        if (tipo === 'processo') {
+            const idProc = $('#el_proc').value;
+            if (!idProc) { alert('Seleziona un processo dal catalogo.'); return; }
+            const body = { id_macchina: idMac, id_processo: Number(idProc) };
+            const prec = $('#el_prec').value;
+            if (prec) body.tav_padre = Number(prec);
+            r = await apiFetch('/lavorazioni', 'POST', body);
+        } else {
+            const idMat = $('#el_mat').value;
+            if (!idMat) { alert('Seleziona una materia prima.'); return; }
+            const qty = parseFloat($('#el_qty').value) || 1;
+            const payload = { id_materiale: Number(idMat), quantita: qty };
+            if ($('#el_pos').value === 'sotto') {
+                const idLav = $('#el_lav').value;
+                if (!idLav) { alert('Seleziona il processo sotto cui mettere il materiale.'); return; }
+                r = await apiFetch('/lavorazioni/' + idLav + '/rich_mat', 'POST', payload);
+            } else {
+                r = await apiFetch('/macchine/' + idMac + '/rich_mat', 'POST', payload);
+            }
+        }
+        if (r && (r.ok || r.status === 201)) { chiudi(); ricaricaGrafoCorrente(); }
+        else if (r) { const e = await r.json().catch(() => ({})); alert('Errore: ' + (e.errore || r.status)); }
     });
+
+    const first = ov.querySelector('select');
+    if (first) first.focus();
 }
 
-document.getElementById('bomAddRootBtn').addEventListener('click', async function() {
+async function eliminaProcessoBom(meta) {
+    if (!confirm('Eliminare il processo "' + (meta.descrizione ?? '') + '" e i suoi materiali?')) return;
+    const r = await apiFetch('/lavorazioni/' + meta.dbId, 'DELETE');
+    if (r && r.ok) ricaricaGrafoCorrente();
+}
+
+async function eliminaMaterialeBom(meta) {
+    if (!confirm('Rimuovere questo materiale dal processo?')) return;
+    const r = await apiFetch('/rich_mat/' + meta.dbId, 'DELETE');
+    if (r && r.ok) ricaricaGrafoCorrente();
+}
+
+document.getElementById('bomAddRootBtn').addEventListener('click', function() {
     if (!_currentMacchina) return;
-    const desc = prompt('Descrizione del processo radice:');
-    if (!desc) return;
-    await apiFetch('/lavorazioni', 'POST', { id_macchina: _currentMacchina.id, descrizione: desc });
-    ricaricaGrafoCorrente();
+    apriModaleElemento(_currentMacchina.id, { tipo: 'processo' });
 });
 
 function chiudiSchedaMacchina() {
@@ -940,12 +900,8 @@ function _onBomFullscreenChange() {
 // ── VISTA OPERATIVA COMMESSA (drag&drop materiali → processi) ─────────────────
 
 let _commessaCorrente = null;
-
-function procStatoClass(stato) {
-    if (stato === 'COMPLETATA') return 'proc-completata';
-    if (stato === 'IN_CORSO')   return 'proc-corso';
-    return 'proc-attesa';
-}
+let _visCommessa = null;
+let _comNodeMeta = {};
 
 function apriVistaCommessa(c) {
     _commessaCorrente = c.id;
@@ -958,115 +914,211 @@ function apriVistaCommessa(c) {
 
 function chiudiVistaCommessa() {
     document.getElementById('commessaOverlay').classList.remove('open');
+    chiudiComMenu();
+    if (_visCommessa) { _visCommessa.destroy(); _visCommessa = null; }
     _commessaCorrente = null;
 }
 
 async function caricaAlberoCommessa(idCommessa) {
     const body = document.getElementById('commessaOpBody');
-    const res = await apiFetch('/commesse/' + idCommessa + '/albero');
-    if (!res || !res.ok) {
-        body.innerHTML = '<p class="machine-no-file">Errore nel caricamento.</p>';
+    if (typeof vis === 'undefined') {
+        body.innerHTML = '<p class="machine-no-file">Libreria grafo non disponibile.</p>';
         return;
     }
+    const res = await apiFetch('/commesse/' + idCommessa + '/albero');
+    if (!res || !res.ok) { body.innerHTML = '<p class="machine-no-file">Errore nel caricamento.</p>'; return; }
     const albero = await res.json();
-
     if (!albero.macchine || !albero.macchine.length) {
         body.innerHTML = '<p class="machine-no-file"><i class="fa-solid fa-diagram-project" style="opacity:.3"></i><br>Nessuna macchina associata alla commessa.</p>';
         return;
     }
 
+    chiudiComMenu();
     body.innerHTML = '';
-    albero.macchine.forEach(m => {
-        const card = document.createElement('div');
-        card.className = 'op-macchina';
-        card.innerHTML =
-            '<div class="op-macchina-header">' +
-                '<i class="fa-solid fa-gear"></i> ' +
-                '<span class="op-macchina-codice">' + (m.codice ?? '-') + '</span>' +
-                '<span class="op-macchina-desc">' + (m.descrizione ?? '') + '</span>' +
-                '<span class="badge badge-commessa">×' + (m.quantita ?? 1) + '</span>' +
-            '</div>';
-        const procWrap = document.createElement('div');
-        procWrap.className = 'op-processi';
-        if (!m.lavorazioni || !m.lavorazioni.length) {
-            procWrap.innerHTML = '<p class="tree-empty">Questa macchina non ha lavorazioni nel catalogo.</p>';
-        } else {
-            m.lavorazioni.forEach(lav => renderProcessoOperativo(lav, m.commessa_macchina_id, procWrap, 0));
+    const container = document.createElement('div');
+    container.id = 'commessaBomGraph';
+    container.className = 'commessa-bom-graph';
+    body.appendChild(container);
+
+    if (_visCommessa) { _visCommessa.destroy(); _visCommessa = null; }
+    _comNodeMeta = {};
+
+    const tree = { tipo: 'commessa', id: albero.id, codice: albero.codice, descrizione: albero.descrizione, macchine: albero.macchine };
+
+    // I materiali COMPLETI spariscono come nodo e compaiono come elenco puntato nel padre;
+    // restano nodi (trascinabili) solo i materiali ancora INCOMPLETI.
+    const matArr = item => (item.tipo === 'lavorazione') ? (item.rich_mat || [])
+                         : (item.tipo === 'macchina')   ? (item.materiali_diretti || []) : [];
+    const matIncompleti = item => matArr(item).filter(m => m.quantita_fornita < m.target);
+    const matCompleti   = item => matArr(item).filter(m => m.quantita_fornita >= m.target);
+    const bulletList = item => {
+        const c = matCompleti(item);
+        if (!c.length) return '';
+        // riga vuota prima dell'elenco e tra le voci, quantità ben distanziata
+        return '\n\n' + c.map(m => '•  ' + (m.codice ?? '-') + '    ×' + m.target).join('\n\n');
+    };
+
+    function getChildren(item) {
+        if (item.tipo === 'commessa')    return item.macchine || [];
+        if (item.tipo === 'macchina')    return [...(item.lavorazioni || []), ...matIncompleti(item)];
+        if (item.tipo === 'lavorazione') return [...(item.figli || []), ...matIncompleti(item)];
+        return [];
+    }
+
+    // Layout: processi in sequenza verso destra; i MATERIALI di un processo
+    // elencati a lista verticale subito SOTTO la targhetta del processo.
+    const X_SEP = 240, ROW = 64, MAT_INDENT = 36;
+    let cy = 0;
+    function place(item, depth) {
+        const x = depth * X_SEP;
+        if (item.tipo === 'rich_mat') {
+            item._px = x; item._py = cy; cy += ROW; return;
         }
-        card.appendChild(procWrap);
-        body.appendChild(card);
+        if (item.tipo === 'lavorazione') {
+            // la targhetta del processo in cima, poi i materiali INCOMPLETI sotto, poi i sotto-processi a destra
+            item._px = x; item._py = cy; cy += ROW;
+            matIncompleti(item).forEach(mt => { mt._px = x + MAT_INDENT; mt._py = cy; cy += ROW; });
+            (item.figli || []).forEach(f => place(f, depth + 1));
+            return;
+        }
+        if (item.tipo === 'macchina') {
+            // materiali diretti incompleti sotto la macchina, processi a destra
+            item._px = x; item._py = cy; cy += ROW;
+            matIncompleti(item).forEach(mt => { mt._px = x + MAT_INDENT; mt._py = cy; cy += ROW; });
+            (item.lavorazioni || []).forEach(l => place(l, depth + 1));
+            return;
+        }
+        // commessa: centrata verticalmente sui figli
+        const ch = getChildren(item);
+        if (!ch.length) { item._px = x; item._py = cy; cy += ROW; return; }
+        const start = cy;
+        ch.forEach(c => place(c, depth + 1));
+        item._px = x; item._py = (start + cy - ROW) / 2;
+    }
+    place(tree, 0);
+
+    const nodes = [], edges = [];
+    let nc = 0;
+    function addNodo(item, parentId, cmId) {
+        const id = ++nc;
+        const childCm = (item.tipo === 'macchina') ? item.commessa_macchina_id : cmId;
+        let bg, border, fc, bw = 2, label;
+
+        if (item.tipo === 'commessa') {
+            bg = '#1c1c1c'; border = '#e5006d'; fc = '#fff';
+            label = 'Commessa ' + (item.codice ?? '#' + item.id);
+            _comNodeMeta[id] = { tipo: 'commessa' };
+        } else if (item.tipo === 'macchina') {
+            bg = '#2b3550'; border = '#5e6b85'; fc = '#fff';
+            label = (item.codice ?? '-') + '  ×' + (item.quantita ?? 1) + '\n' + (item.descrizione ?? '').substring(0, 22) + bulletList(item);
+            _comNodeMeta[id] = { tipo: 'macchina', cm: childCm, completi: matCompleti(item).map(m => ({ rm: m.rich_mat_id, codice: m.codice })) };
+        } else if (item.tipo === 'lavorazione') {
+            if (item.bloccato)                    { bg = '#eceff1'; border = '#b0bec5'; fc = '#90a4ae'; }
+            else if (item.stato === 'COMPLETATA') { bg = '#e8f5e9'; border = '#43a047'; fc = '#1b5e20'; }
+            else if (item.stato === 'IN_CORSO')   { bg = '#fff8e1'; border = '#ffb300'; fc = '#8d6e00'; }
+            else                                  { bg = '#f5f5f5'; border = '#bdbdbd'; fc = '#616161'; }
+            label = (item.bloccato ? '🔒 ' : '') + (item.descrizione ?? 'Processo').substring(0, 26) +
+                    '\n[' + (item.bloccato ? 'BLOCCATO' : item.stato) + ']' + bulletList(item);
+            _comNodeMeta[id] = { tipo: 'lavorazione', cm: childCm, completi: matCompleti(item).map(m => ({ rm: m.rich_mat_id, codice: m.codice })) };
+        } else { // rich_mat
+            const completo = (item.quantita_fornita >= item.target);
+            const senza = (item.quantita_stock ?? 0) <= 0;
+            if (completo)   { bg = '#e8f5e9'; border = '#43a047'; fc = '#1b5e20'; }
+            else if (senza) { bg = '#fde8e8'; border = '#e53935'; fc = '#b71c1c'; }
+            else            { bg = '#ffffff'; border = '#c5b8f5'; fc = '#5e35b1'; }
+            bw = 1;
+            label = (item.codice ?? '-') + '\n' + item.quantita_fornita + '/' + item.target + (completo ? ' ✓' : '') +
+                    '\nstock ' + (item.quantita_stock ?? 0);
+            _comNodeMeta[id] = { tipo: 'rich_mat', rm: item.rich_mat_id, cm: childCm, targetVisId: parentId, fornito: item.quantita_fornita, codice: item.codice };
+        }
+
+        nodes.push({
+            id, label, shape: 'box', x: item._px, y: item._py,
+            color: { background: bg, border }, font: { color: fc, size: 11, face: 'Poppins, sans-serif' },
+            margin: { top: 7, bottom: 7, left: 11, right: 11 }, borderWidth: bw
+        });
+        if (parentId !== null) edges.push({ from: parentId, to: id, arrows: 'to', color: { color: '#ccc' } });
+        getChildren(item).forEach(c => addNodo(c, id, childCm));
+        return id;
+    }
+    addNodo(tree, null, null);
+
+    _visCommessa = new vis.Network(
+        container,
+        { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) },
+        {
+            layout:      { hierarchical: false },
+            physics:     { enabled: false },
+            edges:       { smooth: { type: 'cubicBezier', forceDirection: 'horizontal' } },
+            interaction: { hover: true, dragNodes: true, dragView: true, zoomView: true, navigationButtons: true, keyboard: false }
+        }
+    );
+
+    // DRAG&DROP: trascina un nodo MATERIALE sul suo processo (o sulla macchina, se diretto) → rifornisce 1 unità
+    _visCommessa.on('dragEnd', params => {
+        if (!params.nodes.length) return;
+        const dragged = params.nodes[0];
+        const meta = _comNodeMeta[dragged];
+        if (!meta || meta.tipo !== 'rich_mat') return;
+        const cpos = _visCommessa.DOMtoCanvas(params.pointer.DOM);
+        const pos = _visCommessa.getPositions();
+        let nearest = null, best = Infinity;
+        Object.keys(pos).forEach(k => {
+            const nid = Number(k);
+            if (nid === dragged) return;
+            const d = Math.hypot(pos[nid].x - cpos.x, pos[nid].y - cpos.y);
+            if (d < best) { best = d; nearest = nid; }
+        });
+        if (nearest !== null && best < 95 && nearest === meta.targetVisId) {
+            fornisciMateriale(meta.cm, meta.rm);          // ricarica il grafo su successo
+        } else {
+            caricaAlberoCommessa(_commessaCorrente);      // snap-back: ripristina le posizioni
+        }
     });
+
+    // CLICK: su un materiale incompleto già parzialmente fornito → restituisci;
+    // su una targhetta-padre → restituisci uno dei materiali completati (elencati al suo interno)
+    _visCommessa.on('click', params => {
+        chiudiComMenu();
+        if (!params.nodes.length) return;
+        const meta = _comNodeMeta[params.nodes[0]];
+        if (!meta) return;
+        let items = [];
+        if (meta.tipo === 'rich_mat' && meta.fornito > 0) {
+            items = [{ label: 'Restituisci 1: ' + (meta.codice ?? ''), cm: meta.cm, rm: meta.rm }];
+        } else if ((meta.tipo === 'lavorazione' || meta.tipo === 'macchina') && meta.completi && meta.completi.length) {
+            items = meta.completi.map(c => ({ label: 'Restituisci 1: ' + (c.codice ?? ''), cm: meta.cm, rm: c.rm }));
+        }
+        if (items.length) mostraComMenu(items, params.pointer.DOM);
+    });
+
+    setTimeout(() => { if (_visCommessa) { _visCommessa.redraw(); _visCommessa.fit(); } }, 250);
 }
 
-function renderProcessoOperativo(lav, cmId, container, depth) {
-    const box = document.createElement('div');
-    box.className = 'op-processo';
-    box.style.marginLeft = (depth * 28) + 'px';
-    if (lav.bloccato) box.classList.add('op-processo-bloccato');
+function chiudiComMenu() {
+    const ex = document.getElementById('comEditPanel');
+    if (ex) ex.remove();
+}
 
-    const statoLabel = lav.bloccato ? 'BLOCCATO' : lav.stato;
-    const dropZone = document.createElement('div');
-    dropZone.className = 'op-proc-node ' + procStatoClass(lav.stato);
-    dropZone.innerHTML =
-        '<span class="op-proc-nome"><i class="fa-solid ' + (lav.bloccato ? 'fa-lock' : 'fa-screwdriver-wrench') + '"></i> ' +
-            (lav.descrizione ?? 'Processo') + '</span>' +
-        '<span class="op-proc-stato">' + statoLabel + '</span>';
-    box.appendChild(dropZone);
-
-    // Materiali richiesti: chip trascinabili nel nodo del processo
-    if (lav.rich_mat && lav.rich_mat.length) {
-        const matWrap = document.createElement('div');
-        matWrap.className = 'op-materiali';
-        lav.rich_mat.forEach(rm => {
-            const completo = (rm.quantita_fornita >= rm.target);
-            const senzaStock = (rm.quantita_stock ?? 0) <= 0;
-            const chip = document.createElement('div');
-            chip.className = 'op-chip' + (completo ? ' op-chip-ok' : '');
-            const trascinabile = !lav.bloccato && !completo && !senzaStock;
-            chip.draggable = trascinabile;
-            chip.dataset.cm = cmId;
-            chip.dataset.rm = rm.rich_mat_id;
-            chip.innerHTML =
-                '<i class="fa-solid fa-grip-vertical op-chip-grip"></i>' +
-                '<span class="op-chip-cod">' + (rm.codice ?? '-') + '</span>' +
-                '<span class="op-chip-count">' + rm.quantita_fornita + '/' + rm.target + (completo ? ' ✓' : '') + '</span>' +
-                '<span class="op-chip-stock' + (senzaStock ? ' qty-danger' : '') + '">stock ' + (rm.quantita_stock ?? 0) + '</span>' +
-                (rm.quantita_fornita > 0 ? '<button class="op-chip-undo" title="Restituisci 1 al magazzino"><i class="fa-solid fa-rotate-left"></i></button>' : '');
-
-            if (trascinabile) {
-                chip.addEventListener('dragstart', ev => {
-                    ev.dataTransfer.setData('text/plain', JSON.stringify({ cm: cmId, rm: rm.rich_mat_id }));
-                    ev.dataTransfer.effectAllowed = 'move';
-                    chip.classList.add('op-chip-dragging');
-                });
-                chip.addEventListener('dragend', () => chip.classList.remove('op-chip-dragging'));
-            }
-            const undoBtn = chip.querySelector('.op-chip-undo');
-            if (undoBtn) undoBtn.addEventListener('click', () => restituisciMateriale(cmId, rm.rich_mat_id));
-            matWrap.appendChild(chip);
-        });
-        box.appendChild(matWrap);
-    }
-
-    // Il nodo processo è la zona di rilascio
-    if (!lav.bloccato) {
-        dropZone.addEventListener('dragover', ev => { ev.preventDefault(); dropZone.classList.add('op-proc-over'); });
-        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('op-proc-over'));
-        dropZone.addEventListener('drop', ev => {
-            ev.preventDefault();
-            dropZone.classList.remove('op-proc-over');
-            let data;
-            try { data = JSON.parse(ev.dataTransfer.getData('text/plain')); } catch { return; }
-            if (data && data.rm) fornisciMateriale(data.cm, data.rm);
-        });
-    }
-
-    container.appendChild(box);
-
-    // Figli (processi successivi nella sequenza)
-    if (lav.figli && lav.figli.length) {
-        lav.figli.forEach(f => renderProcessoOperativo(f, cmId, container, depth + 1));
-    }
+function mostraComMenu(items, domPos) {
+    const graph = document.getElementById('commessaBomGraph');
+    if (!graph) return;
+    const panel = document.createElement('div');
+    panel.id = 'comEditPanel';
+    panel.className = 'bom-edit-panel';
+    panel.innerHTML = items.map((it, i) =>
+        '<button data-i="' + i + '"><i class="fa-solid fa-rotate-left"></i> ' + it.label + '</button>'
+    ).join('');
+    graph.appendChild(panel);
+    const maxX = graph.clientWidth - panel.offsetWidth - 8;
+    const maxY = graph.clientHeight - panel.offsetHeight - 8;
+    panel.style.left = Math.max(8, Math.min(domPos.x, maxX)) + 'px';
+    panel.style.top  = Math.max(8, Math.min(domPos.y, maxY)) + 'px';
+    panel.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+        const it = items[Number(b.dataset.i)];
+        chiudiComMenu();
+        restituisciMateriale(it.cm, it.rm);
+    }));
 }
 
 async function fornisciMateriale(cmId, rmId) {

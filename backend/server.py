@@ -57,11 +57,18 @@ class CommessaMacchina(db.Model):
     quantita    = db.Column(db.Integer, default=1)
     stato       = db.Column(db.Enum('IN_ATTESA', 'IN_CORSO', 'COMPLETATA'), default='IN_ATTESA')
 
+class ProcessoTipo(db.Model):
+    """Catalogo CONDIVISO dei tipi di processo (es. 'saldatura'), gestito dalla scheda Lavorazioni."""
+    __tablename__ = 'processi_tipo'
+    id          = db.Column(db.Integer, primary_key=True)
+    descrizione = db.Column(db.String(255))
+
 class Lavorazione(db.Model):
+    """Istanza di un processo-tipo su una macchina, con sequenza via tav_padre."""
     __tablename__ = 'lavorazioni'
     id          = db.Column(db.Integer, primary_key=True)
     id_macchina = db.Column(db.Integer, db.ForeignKey('macchine.id'), nullable=False)
-    descrizione = db.Column(db.String(255))
+    id_processo = db.Column(db.Integer, db.ForeignKey('processi_tipo.id'), nullable=True)
     tav_padre   = db.Column(db.Integer, db.ForeignKey('lavorazioni.id'), nullable=True)
     # Nessuno stato: l'avanzamento è derivato per commessa dalle forniture (vedi FornituraMateriale)
 
@@ -73,9 +80,11 @@ class Materiale(db.Model):
     Quantita        = db.Column(db.Integer, default=0)
 
 class RichMat(db.Model):
+    """Materiale richiesto: sotto un processo (id_lavorazione) OPPURE diretto sulla macchina (id_macchina)."""
     __tablename__ = 'rich_mat'
     id             = db.Column(db.Integer, primary_key=True)
-    id_lavorazione = db.Column(db.Integer, db.ForeignKey('lavorazioni.id'), nullable=False)
+    id_lavorazione = db.Column(db.Integer, db.ForeignKey('lavorazioni.id'), nullable=True)
+    id_macchina    = db.Column(db.Integer, db.ForeignKey('macchine.id'), nullable=True)
     id_materiale   = db.Column(db.Integer, db.ForeignKey('materialeMagazzino.id'), nullable=False)
     quantita       = db.Column(db.Float, nullable=False, default=1)
 
@@ -112,6 +121,14 @@ def admin_required(f):
 
 # ── HELPER ALBERO ─────────────────────────────────────────────────────────────
 
+def desc_processo(lav):
+    """Descrizione di una lavorazione-istanza, presa dal catalogo ProcessoTipo."""
+    if lav.id_processo:
+        p = ProcessoTipo.query.get(lav.id_processo)
+        if p:
+            return p.descrizione
+    return None
+
 def build_albero_lavorazione(id_lav, visitati):
     """Albero STRUTTURALE del catalogo (senza stato: lo stato è per commessa)."""
     if id_lav in visitati:
@@ -143,11 +160,26 @@ def build_albero_lavorazione(id_lav, visitati):
 
     return {
         "id": lav.id,
-        "descrizione": lav.descrizione,
+        "descrizione": desc_processo(lav),
         "tipo": "lavorazione",
         "rich_mat": materiali,
         "figli": figli
     }
+
+
+def serializza_richmat_diretti_catalogo(id_macchina):
+    """Materiali attaccati direttamente alla macchina (senza processo) — vista catalogo."""
+    out = []
+    for r in RichMat.query.filter_by(id_macchina=id_macchina, id_lavorazione=None).all():
+        mat = Materiale.query.get(r.id_materiale)
+        if mat:
+            out.append({
+                "id": r.id, "id_materiale": mat.id,
+                "codice": mat.CodiceMateriale, "descrizione": mat.Descrizione,
+                "quantita_richiesta": r.quantita, "quantita_stock": mat.Quantita,
+                "tipo": "rich_mat"
+            })
+    return out
 
 
 def stato_lavorazione_cm(cm_id, cm_quantita, id_lav):
@@ -211,13 +243,31 @@ def build_albero_commessa(cm, id_lav, padre_completo, visitati):
 
     return {
         "id": lav.id,
-        "descrizione": lav.descrizione,
+        "descrizione": desc_processo(lav),
         "tipo": "lavorazione",
         "stato": stato,
         "bloccato": not padre_completo,   # sbloccato solo se il processo precedente è COMPLETATA
         "rich_mat": materiali,
         "figli": figli
     }
+
+
+def serializza_richmat_diretti_commessa(cm):
+    """Materiali diretti della macchina (senza processo) — vista operativa commessa."""
+    out = []
+    for r in RichMat.query.filter_by(id_macchina=cm.id_macchina, id_lavorazione=None).all():
+        mat = Materiale.query.get(r.id_materiale)
+        if not mat:
+            continue
+        f = FornituraMateriale.query.filter_by(id_commessa_macchina=cm.id, id_rich_mat=r.id).first()
+        out.append({
+            "rich_mat_id": r.id, "id_materiale": mat.id,
+            "codice": mat.CodiceMateriale, "descrizione": mat.Descrizione,
+            "quantita_richiesta": r.quantita, "target": r.quantita * cm.quantita,
+            "quantita_fornita": f.quantita_fornita if f else 0,
+            "quantita_stock": mat.Quantita, "tipo": "rich_mat"
+        })
+    return out
 
 
 # ── HOME ──────────────────────────────────────────────────────────────────────
@@ -423,7 +473,8 @@ def get_albero_commessa(id):
             "commessa_macchina_id": cm.id,
             "id": m.id, "codice": m.codice, "descrizione": m.descrizione,
             "quantita": cm.quantita, "tipo": "macchina",
-            "lavorazioni": lavs
+            "lavorazioni": lavs,
+            "materiali_diretti": serializza_richmat_diretti_commessa(cm)
         })
 
     return jsonify({
@@ -436,13 +487,15 @@ def get_albero_commessa(id):
 # ── FORNITURA MATERIALI (drag&drop operativo: scarico magazzino per commessa) ──
 
 def _valida_fornitura(cm_id, rm_id):
-    """Recupera e valida la coppia commessa-macchina / materiale richiesto."""
+    """Valida la coppia commessa-macchina / materiale richiesto.
+    Il materiale può stare sotto un processo (lav) o essere diretto sulla macchina (lav=None)."""
     cm = CommessaMacchina.query.get(cm_id)
     rm = RichMat.query.get(rm_id)
     if not cm or not rm:
         return None, None, None, (jsonify({"errore": "Commessa-macchina o materiale non trovato"}), 404)
-    lav = Lavorazione.query.get(rm.id_lavorazione)
-    if not lav or lav.id_macchina != cm.id_macchina:
+    lav = Lavorazione.query.get(rm.id_lavorazione) if rm.id_lavorazione else None
+    macchina_del_mat = lav.id_macchina if lav else rm.id_macchina
+    if macchina_del_mat != cm.id_macchina:
         return None, None, None, (jsonify({"errore": "Il materiale non appartiene a questa macchina"}), 400)
     return cm, rm, lav, None
 
@@ -455,14 +508,14 @@ def fornisci_materiale(cm_id, rm_id):
         return err
 
     # Vincolo di sequenza: il processo precedente (tav_padre) dev'essere completato
-    if lav.tav_padre and stato_lavorazione_cm(cm.id, cm.quantita, lav.tav_padre) != "COMPLETATA":
+    if lav and lav.tav_padre and stato_lavorazione_cm(cm.id, cm.quantita, lav.tav_padre) != "COMPLETATA":
         return jsonify({"errore": "Il processo precedente non è ancora completato"}), 409
 
     target = rm.quantita * cm.quantita
     f = FornituraMateriale.query.filter_by(id_commessa_macchina=cm.id, id_rich_mat=rm.id).first()
     forn = f.quantita_fornita if f else 0
     if forn >= target:
-        return jsonify({"errore": "Materiale già completo per questo processo"}), 409
+        return jsonify({"errore": "Materiale già completo"}), 409
 
     mat = Materiale.query.get(rm.id_materiale)
     if not mat or (mat.Quantita or 0) < 1:
@@ -480,7 +533,7 @@ def fornisci_materiale(cm_id, rm_id):
         "quantita_fornita": f.quantita_fornita,
         "target": target,
         "quantita_stock": mat.Quantita,
-        "stato_lavorazione": stato_lavorazione_cm(cm.id, cm.quantita, lav.id)
+        "stato_lavorazione": stato_lavorazione_cm(cm.id, cm.quantita, lav.id) if lav else None
     }), 200
 
 @app.route("/commessa-macchine/<int:cm_id>/rich_mat/<int:rm_id>/restituisci", methods=["POST"])
@@ -506,7 +559,7 @@ def restituisci_materiale(cm_id, rm_id):
         "quantita_fornita": f.quantita_fornita,
         "target": rm.quantita * cm.quantita,
         "quantita_stock": mat.Quantita if mat else None,
-        "stato_lavorazione": stato_lavorazione_cm(cm.id, cm.quantita, lav.id)
+        "stato_lavorazione": stato_lavorazione_cm(cm.id, cm.quantita, lav.id) if lav else None
     }), 200
 
 
@@ -560,8 +613,8 @@ def elimina_macchina(id):
 def get_lavorazioni_macchina(id):
     lavorazioni = Lavorazione.query.filter_by(id_macchina=id).all()
     return jsonify([{
-        "id": l.id, "descrizione": l.descrizione,
-        "tav_padre": l.tav_padre
+        "id": l.id, "descrizione": desc_processo(l),
+        "id_processo": l.id_processo, "tav_padre": l.tav_padre
     } for l in lavorazioni]), 200
 
 @app.route("/macchine/<int:id>/albero", methods=["GET"])
@@ -581,7 +634,8 @@ def get_albero_macchina(id):
     return jsonify({
         "id": macchina.id, "codice": macchina.codice,
         "descrizione": macchina.descrizione, "tipo": "macchina",
-        "lavorazioni": lavorazioni
+        "lavorazioni": lavorazioni,
+        "materiali_diretti": serializza_richmat_diretti_catalogo(id)
     }), 200
 
 @app.route("/macchine/<int:id>/files", methods=["GET"])
@@ -620,13 +674,59 @@ def serve_machine_st(filename):
     return send_file(filepath, mimetype='application/pdf')
 
 
-# ── LAVORAZIONI ───────────────────────────────────────────────────────────────
+# ── PROCESSI (catalogo condiviso, scheda "Lavorazioni") ───────────────────────
+
+@app.route("/processi", methods=["GET"])
+@jwt_required()
+def get_processi():
+    return jsonify([{
+        "id": p.id, "descrizione": p.descrizione
+    } for p in ProcessoTipo.query.all()])
+
+@app.route("/processi", methods=["POST"])
+@jwt_required()
+def crea_processo():
+    data = request.get_json()
+    if not data or not data.get("descrizione"):
+        return jsonify({"errore": "descrizione obbligatoria"}), 400
+    nuovo = ProcessoTipo(descrizione=data["descrizione"])
+    db.session.add(nuovo)
+    db.session.commit()
+    return jsonify({"messaggio": "Processo creato", "id": nuovo.id}), 201
+
+@app.route("/processi/<int:id>", methods=["PUT"])
+@jwt_required()
+def modifica_processo(id):
+    p = ProcessoTipo.query.get(id)
+    if not p:
+        return jsonify({"errore": "Processo non trovato"}), 404
+    data = request.get_json() or {}
+    p.descrizione = data.get("descrizione", p.descrizione)
+    db.session.commit()
+    return jsonify({"messaggio": "Processo aggiornato"}), 200
+
+@app.route("/processi/<int:id>", methods=["DELETE"])
+@jwt_required()
+def elimina_processo(id):
+    p = ProcessoTipo.query.get(id)
+    if not p:
+        return jsonify({"errore": "Processo non trovato"}), 404
+    usi = Lavorazione.query.filter_by(id_processo=id).count()
+    if usi:
+        return jsonify({"errore": "Processo usato da %d macchina/e: rimuovilo prima da quelle." % usi}), 409
+    db.session.delete(p)
+    db.session.commit()
+    return jsonify({"messaggio": "Processo eliminato"}), 200
+
+
+# ── LAVORAZIONI (istanze di processo su macchina) ─────────────────────────────
 
 @app.route("/lavorazioni", methods=["GET"])
 @jwt_required()
 def get_lavorazioni():
     return jsonify([{
-        "id": l.id, "descrizione": l.descrizione,
+        "id": l.id, "descrizione": desc_processo(l),
+        "id_processo": l.id_processo,
         "id_macchina": l.id_macchina, "tav_padre": l.tav_padre
     } for l in Lavorazione.query.all()])
 
@@ -636,6 +736,8 @@ def crea_lavorazione():
     data = request.get_json()
     if not data or not data.get("id_macchina"):
         return jsonify({"errore": "id_macchina obbligatorio"}), 400
+    if not data.get("id_processo"):
+        return jsonify({"errore": "id_processo obbligatorio"}), 400
 
     tav_padre = data.get("tav_padre") or None
     if tav_padre:
@@ -645,7 +747,7 @@ def crea_lavorazione():
 
     nuova = Lavorazione(
         id_macchina=data.get("id_macchina"),
-        descrizione=data.get("descrizione"),
+        id_processo=data.get("id_processo"),
         tav_padre=tav_padre
     )
     db.session.add(nuova)
@@ -659,7 +761,7 @@ def modifica_lavorazione(id):
     if not lavorazione:
         return jsonify({"errore": "Lavorazione non trovata"}), 404
     data = request.get_json() or {}
-    lavorazione.descrizione = data.get("descrizione", lavorazione.descrizione)
+    lavorazione.id_processo = data.get("id_processo", lavorazione.id_processo)
     lavorazione.tav_padre   = data.get("tav_padre", lavorazione.tav_padre) or None
     db.session.commit()
     return jsonify({"messaggio": "Lavorazione aggiornata"}), 200
@@ -716,6 +818,27 @@ def aggiungi_rich_mat(id):
     db.session.add(nuovo)
     db.session.commit()
     return jsonify({"messaggio": "Materiale aggiunto", "id": nuovo.id}), 201
+
+@app.route("/macchine/<int:id>/rich_mat", methods=["POST"])
+@jwt_required()
+def aggiungi_rich_mat_macchina(id):
+    """Materiale richiesto DIRETTO sulla macchina (senza processo, montato as-is)."""
+    if not Macchina.query.get(id):
+        return jsonify({"errore": "Macchina non trovata"}), 404
+    data = request.get_json()
+    if not data or not data.get("id_materiale"):
+        return jsonify({"errore": "id_materiale obbligatorio"}), 400
+    qty = float(data.get("quantita", 1))
+    if qty <= 0:
+        return jsonify({"errore": "Quantità deve essere maggiore di zero"}), 400
+    nuovo = RichMat(
+        id_macchina=id,
+        id_materiale=data.get("id_materiale"),
+        quantita=qty
+    )
+    db.session.add(nuovo)
+    db.session.commit()
+    return jsonify({"messaggio": "Materiale diretto aggiunto", "id": nuovo.id}), 201
 
 
 # ── RICH MAT (singolo) ────────────────────────────────────────────────────────

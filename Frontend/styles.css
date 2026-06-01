@@ -2787,17 +2787,66 @@ div.vis-network div.vis-navigation div.vis-button:active {
    ========================================================================== */
 .commessa-op-body {
     flex: 1;
-    overflow-y: auto;
-    padding: 24px 28px;
+    overflow: hidden;
+    padding: 0;
     background: #fafafa;
+    position: relative;
+    min-height: 0;
+}
+
+/* Grafo BOM della commessa (vis.js) a tutta area */
+.commessa-bom-graph {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Grafico unico della commessa: radice + rami (macchine) collegati */
+.op-commessa-graph { position: relative; }
+
+.op-commessa-root {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #1c1c1c;
+    color: #fff;
+    border: 2px solid var(--primary-pink);
+    border-radius: 12px;
+    padding: 14px 18px;
+    font-weight: 700;
+    font-size: 17px;
+    margin-bottom: 4px;
+}
+.op-commessa-root i { color: var(--primary-pink); }
+.op-commessa-root .op-macchina-desc { color: #bbb; font-weight: 400; }
+
+/* Rami: linea verticale che collega la radice alle macchine */
+.op-commessa-rami {
+    position: relative;
+    margin-left: 22px;
+    padding-left: 24px;
+    border-left: 2px solid #d8d8d8;
+    padding-top: 14px;
 }
 
 .op-macchina {
+    position: relative;
     background: #fff;
     border: 1.5px solid var(--clr-border);
     border-radius: 14px;
     padding: 18px 20px;
-    margin-bottom: 22px;
+    margin-bottom: 18px;
+}
+/* Trattino orizzontale dal ramo verticale alla card macchina */
+.op-commessa-rami .op-macchina::before {
+    content: '';
+    position: absolute;
+    left: -24px;
+    top: 28px;
+    width: 24px;
+    height: 2px;
+    background: #d8d8d8;
 }
 .op-macchina-header {
     display: flex;
@@ -2837,6 +2886,7 @@ div.vis-network div.vis-navigation div.vis-button:active {
 .proc-attesa     { background: #f5f5f5; border-color: #bdbdbd; color: #616161; }
 .proc-corso      { background: #fff8e1; border-color: #ffc107; color: #8d6e00; }   /* giallo = in corso */
 .proc-completata { background: #e8f5e9; border-color: #43a047; color: #2e7d32; }   /* verde = completata */
+.proc-diretti    { background: #f3f0ff; border-color: #c5b8f5; color: #5e35b1; }   /* materiali diretti macchina */
 
 .op-proc-over {
     box-shadow: 0 0 0 3px rgba(229,0,109,0.35);
