@@ -30,6 +30,83 @@ function statoClass(stato) {
     return 'badge-attesa';
 }
 
+// Colore distinto e stabile per ogni lavorazione (stesso nome processo = stesso colore)
+const _PALETTA_LAV = [
+    { bg: '#ffe2e2', border: '#e57373' }, { bg: '#e3f0fd', border: '#5c9ded' },
+    { bg: '#e6f6e9', border: '#66bb6a' }, { bg: '#fff1da', border: '#ffa726' },
+    { bg: '#f3e6fb', border: '#ab57c9' }, { bg: '#e0f5f2', border: '#26a69a' },
+    { bg: '#fde4ef', border: '#ec5f9b' }, { bg: '#e7e9fb', border: '#7986cb' },
+    { bg: '#efe6e1', border: '#a1887f' }, { bg: '#eef7df', border: '#9ccc65' },
+    { bg: '#e1f5fe', border: '#29b6f6' }, { bg: '#ffe9e0', border: '#ff8a65' }
+];
+function coloreLavorazione(key) {
+    const s = String(key ?? '');
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return _PALETTA_LAV[h % _PALETTA_LAV.length];
+}
+
+// Combobox con ricerca: input di testo + elenco filtrato. opzioni = [{value, label, tag}].
+// L'elenco è appeso al body (posizione fissa) per non essere tagliato dai contenitori con overflow:hidden.
+// Ritorna un elemento con metodi .getValore() (opzione scelta o null) e .reset().
+function creaAutocomplete(opzioni, placeholder) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ac-wrap';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tree-input ac-input';
+    input.placeholder = placeholder || 'Cerca...';
+    input.autocomplete = 'off';
+    wrap.appendChild(input);
+
+    const list = document.createElement('div');
+    list.className = 'ac-list';
+    list.style.display = 'none';
+    document.body.appendChild(list);
+
+    // rimuove la lista (appesa al body) quando l'input viene tolto dal DOM
+    const obs = new MutationObserver(() => {
+        if (!document.body.contains(input)) { list.remove(); obs.disconnect(); }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+
+    let selezionato = null;
+
+    function posiziona() {
+        const r = input.getBoundingClientRect();
+        list.style.left = r.left + 'px';
+        list.style.top = (r.bottom + 4) + 'px';
+        list.style.width = r.width + 'px';
+    }
+    function render() {
+        const q = input.value.toLowerCase().trim();
+        const filt = (q ? opzioni.filter(o => o.label.toLowerCase().includes(q)) : opzioni).slice(0, 60);
+        list.innerHTML = filt.length
+            ? filt.map((o, i) => '<div class="ac-item" data-i="' + i + '"><span>' + o.label + '</span>' +
+                (o.tag ? '<span class="ac-tag ac-tag-' + o.tag.replace(/\s+/g, '-') + '">' + o.tag + '</span>' : '') + '</div>').join('')
+            : '<div class="ac-empty">Nessun risultato</div>';
+        list.querySelectorAll('.ac-item').forEach(el => {
+            el.addEventListener('mousedown', e => {   // mousedown: scatta prima del blur
+                e.preventDefault();
+                selezionato = filt[Number(el.dataset.i)];
+                input.value = selezionato.label;
+                input.classList.add('ac-scelto');
+                list.style.display = 'none';
+            });
+        });
+        posiziona();
+        list.style.display = '';
+    }
+
+    input.addEventListener('input', () => { selezionato = null; input.classList.remove('ac-scelto'); render(); });
+    input.addEventListener('focus', render);
+    input.addEventListener('blur', () => setTimeout(() => { list.style.display = 'none'; }, 150));
+
+    wrap.getValore = () => selezionato;
+    wrap.reset = () => { selezionato = null; input.value = ''; input.classList.remove('ac-scelto'); list.style.display = 'none'; };
+    return wrap;
+}
+
 // ── RICERCA ───────────────────────────────────────────────────────────────────
 
 document.getElementById('searchInput').addEventListener('input', function () {
@@ -86,7 +163,7 @@ async function caricaSezione(sezione) {
 // ── RENDER COMMESSE ───────────────────────────────────────────────────────────
 
 function renderCommesse(dati, container) {
-    dati.forEach(c => {
+    const renderUna = (c, target) => {
         const statoClass = c.stato === 'CHIUSA' ? 'badge badge-chiusa' : 'badge badge-aperta';
         const div = document.createElement('div');
         div.className = 'commessa-card-accordion';
@@ -118,7 +195,7 @@ function renderCommesse(dati, container) {
                     '<p class="tree-empty">Apri per vedere le macchine associate.</p>' +
                 '</div>' +
             '</div>';
-        container.appendChild(div);
+        target.appendChild(div);
 
         div.querySelector('.btn-grafo-commessa').addEventListener('click', function(e) {
             e.stopPropagation();
@@ -130,7 +207,23 @@ function renderCommesse(dati, container) {
                 if (div.classList.contains('active')) caricaMacchineCommessa(c.id);
             }
         });
-    });
+    };
+
+    // In corso / incomplete sopra; completate (100%) dentro un riquadro verde sotto
+    const inCorso    = dati.filter(c => (c.progresso ?? 0) < 100);
+    const completate = dati.filter(c => (c.progresso ?? 0) >= 100);
+
+    inCorso.forEach(c => renderUna(c, container));
+    if (completate.length) {
+        const box = document.createElement('div');
+        box.className = 'completate-box';
+        const hdr = document.createElement('div');
+        hdr.className = 'completate-box-header';
+        hdr.innerHTML = '<i class="fa-solid fa-circle-check"></i> Completate (' + completate.length + ')';
+        box.appendChild(hdr);
+        completate.forEach(c => renderUna(c, box));
+        container.appendChild(box);
+    }
 }
 
 // ── RENDER MACCHINE ───────────────────────────────────────────────────────────
@@ -222,13 +315,16 @@ function renderSemilavorati(dati, container) {
         div.dataset.id = s.id ?? '';
         div.dataset.record = JSON.stringify(s);
         div.dataset.sezione = 'semilavorati';
+        // tag del processo (lavorazione) con colore distinto per ogni processo
+        const pc = s.processo ? coloreLavorazione(s.processo) : { bg: '#f0f0f0', border: '#9e9e9e' };
+        const procStyle = 'background:' + pc.bg + ';border:1px solid ' + pc.border + ';color:' + pc.border + ';font-weight:600;';
         div.innerHTML =
             '<div class="accordion-header">' +
                 '<span class="accordion-arrow">&#x203A;</span>' +
                 '<span class="item-code commessa-code">' + (s.codice || s.descrizione || '-') + '</span>' +
                 '<div class="accordion-badges">' +
                     '<span class="badge">' + (s.descrizione ?? '-') + '</span>' +
-                    '<span class="badge badge-commessa"><i class="fa-solid fa-screwdriver-wrench"></i> ' + (s.processo ?? 'processo non impostato') + '</span>' +
+                    '<span class="badge" style="' + procStyle + '"><i class="fa-solid fa-screwdriver-wrench"></i> ' + (s.processo ?? 'processo non impostato') + '</span>' +
                 '</div>' +
                 '<div class="card-actions">' +
                     '<button class="action-btn edit-btn btn-modifica" title="Modifica"><i class="fa-solid fa-pen"></i></button>' +
@@ -311,28 +407,30 @@ async function caricaRicettaSemilavorato(idSem) {
         tree.insertAdjacentHTML('beforeend', '<p class="tree-empty">Nessun componente. Aggiungine sotto.</p>');
     }
 
-    // 3) Form aggiunta componente (materia prima o altro semilavorato)
+    // 3) Form aggiunta componente — barra di ricerca con elenco filtrato
+    const opzioni = materiali.map(m => ({ value: 'm' + m.id, label: (m.codice ?? '-') + ' — ' + (m.descrizione ?? ''), tag: 'materia prima' }))
+        .concat(semilav.filter(x => x.id !== idSem).map(x => ({ value: 's' + x.id, label: (x.codice || x.descrizione || '-'), tag: 'semilavorato' })));
+
     const addRow = document.createElement('div');
     addRow.className = 'tree-add-row';
-    const optMat = materiali.map(m => '<option value="m' + m.id + '">' + (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') + '</option>').join('');
-    const optSl  = semilav.filter(x => x.id !== idSem).map(x => '<option value="s' + x.id + '">' + (x.codice || x.descrizione || '-') + ' (semilav.)</option>').join('');
-    addRow.innerHTML =
-        '<select id="sl-comp-' + idSem + '" class="tree-input tree-input-wide">' +
-            '<option value="">Aggiungi componente...</option>' +
-            '<optgroup label="Materie prime">' + optMat + '</optgroup>' +
-            (optSl ? '<optgroup label="Semilavorati">' + optSl + '</optgroup>' : '') +
-        '</select>' +
-        '<input type="number" id="sl-cq-' + idSem + '" class="tree-input tree-input-sm" value="1" min="0.01" step="0.01">' +
-        '<button class="bom-confirm-btn" id="sl-cadd-' + idSem + '" title="Aggiungi"><i class="fa-solid fa-plus"></i></button>';
+    const combo = creaAutocomplete(opzioni, 'Cerca materia prima o semilavorato...');
+    combo.classList.add('ac-wide');
+    const qtyInput = document.createElement('input');
+    qtyInput.type = 'number'; qtyInput.className = 'tree-input tree-input-sm'; qtyInput.value = '1'; qtyInput.min = '0.01'; qtyInput.step = '0.01';
+    const addBtn = document.createElement('button');
+    addBtn.className = 'bom-confirm-btn'; addBtn.title = 'Aggiungi'; addBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+    addRow.appendChild(combo);
+    addRow.appendChild(qtyInput);
+    addRow.appendChild(addBtn);
     tree.appendChild(addRow);
 
-    document.getElementById('sl-cadd-' + idSem).addEventListener('click', async function() {
-        const val = document.getElementById('sl-comp-' + idSem).value;
-        if (!val) return;
-        const qty = parseFloat(document.getElementById('sl-cq-' + idSem).value) || 1;
+    addBtn.addEventListener('click', async function() {
+        const sel = combo.getValore();
+        if (!sel) { combo.querySelector('.ac-input').focus(); return; }
+        const qty = parseFloat(qtyInput.value) || 1;
         const body = { quantita: qty };
-        if (val[0] === 'm') body.id_materiale = Number(val.slice(1));
-        else body.id_semilavorato_comp = Number(val.slice(1));
+        if (sel.value[0] === 'm') body.id_materiale = Number(sel.value.slice(1));
+        else body.id_semilavorato_comp = Number(sel.value.slice(1));
         const r = await apiFetch('/semilavorati/' + idSem + '/componenti', 'POST', body);
         if (r && (r.ok || r.status === 201)) caricaRicettaSemilavorato(idSem);
         else if (r) { const e = await r.json().catch(() => ({})); alert('Errore: ' + (e.errore || r.status)); }
@@ -351,6 +449,13 @@ function qtyClass(qty) {
 }
 
 function renderMateriale(dati, container) {
+    // Tasto unico: apre la modalità "Aggiorna giacenze" su TUTTE le voci
+    const toolbar = document.createElement('div');
+    toolbar.className = 'mat-toolbar';
+    toolbar.innerHTML = '<button class="giac-bulk-btn"><i class="fa-solid fa-boxes-stacked"></i> Aggiorna giacenze</button>';
+    container.appendChild(toolbar);
+    toolbar.querySelector('.giac-bulk-btn').addEventListener('click', () => apriPopupGiacenze(dati));
+
     const hdr = document.createElement('div');
     hdr.className = 'cards-col-header header-mat';
     hdr.innerHTML =
@@ -380,6 +485,91 @@ function renderMateriale(dati, container) {
             '</div>';
         container.appendChild(div);
     });
+}
+
+// Modalità "Aggiorna giacenze": una lista di tutte le materie prime, modificabili in blocco, con salvataggio unico
+function apriPopupGiacenze(materiali) {
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay open';
+    ov.innerHTML =
+        '<div class="modal modal-giacenze">' +
+            '<div class="modal-header"><h3><i class="fa-solid fa-boxes-stacked"></i> Aggiorna giacenze</h3>' +
+                '<button class="modal-close"><i class="fa-solid fa-xmark"></i></button></div>' +
+            '<div class="modal-body">' +
+                '<input type="text" id="giacFiltro" class="giac-filtro" placeholder="Filtra per codice o descrizione...">' +
+                '<div class="giac-list" id="giacList"></div>' +
+            '</div>' +
+            '<div class="modal-footer">' +
+                '<span class="giac-count" id="giacCount"></span>' +
+                '<button class="modal-btn-cancel">Annulla</button>' +
+                '<button class="modal-btn-save">Salva tutto</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(ov);
+
+    const listEl = ov.querySelector('#giacList');
+    const countEl = ov.querySelector('#giacCount');
+
+    function aggiornaCount() {
+        const n = listEl.querySelectorAll('.giac-rowm.giac-changed').length;
+        countEl.textContent = n ? (n + ' modifica' + (n > 1 ? 'he' : '')) : '';
+    }
+
+    materiali.forEach(m => {
+        const orig = Number(m.quantita) || 0;
+        const row = document.createElement('div');
+        row.className = 'giac-rowm';
+        row.dataset.id = m.id;
+        row.dataset.orig = orig;
+        row.innerHTML =
+            '<div class="giac-rowm-info">' +
+                '<span class="giac-rowm-cod">' + (m.codice ?? '-') + '</span>' +
+                '<span class="giac-rowm-desc">' + (m.descrizione ?? '') + '</span>' +
+            '</div>' +
+            '<div class="giac-rowm-step">' +
+                '<input type="number" class="giac-rowm-amt" value="1" min="1" step="1" title="Quantità da aggiungere/togliere">' +
+                '<button class="giac-mini" data-s="-1" title="Togli">−</button>' +
+                '<input type="number" class="giac-rowm-val" value="' + orig + '" min="0" step="1" title="Giacenza">' +
+                '<button class="giac-mini giac-up-btn" data-s="1" title="Aggiungi">+</button>' +
+            '</div>';
+        listEl.appendChild(row);
+
+        const val = row.querySelector('.giac-rowm-val');
+        const amt = row.querySelector('.giac-rowm-amt');
+        const mark = () => { row.classList.toggle('giac-changed', (parseInt(val.value) || 0) !== orig); aggiornaCount(); };
+        row.querySelectorAll('.giac-mini').forEach(b => b.addEventListener('click', () => {
+            const passo = Math.max(1, parseInt(amt.value) || 1);
+            val.value = Math.max(0, (parseInt(val.value) || 0) + Number(b.dataset.s) * passo); mark();
+        }));
+        val.addEventListener('input', mark);
+    });
+
+    ov.querySelector('#giacFiltro').addEventListener('input', function() {
+        const q = this.value.toLowerCase();
+        listEl.querySelectorAll('.giac-rowm').forEach(row => {
+            row.style.display = row.querySelector('.giac-rowm-info').textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+    });
+
+    const chiudi = () => ov.remove();
+    ov.querySelector('.modal-close').addEventListener('click', chiudi);
+    ov.querySelector('.modal-btn-cancel').addEventListener('click', chiudi);
+    ov.addEventListener('click', e => { if (e.target === ov) chiudi(); });
+
+    ov.querySelector('.modal-btn-save').addEventListener('click', async function() {
+        const cambiate = [...listEl.querySelectorAll('.giac-rowm')].filter(row =>
+            (parseInt(row.querySelector('.giac-rowm-val').value) || 0) !== Number(row.dataset.orig));
+        if (!cambiate.length) { chiudi(); return; }
+        this.disabled = true; this.textContent = 'Salvataggio...';
+        for (const row of cambiate) {
+            const v = Math.max(0, parseInt(row.querySelector('.giac-rowm-val').value) || 0);
+            await apiFetch('/materiale/' + row.dataset.id, 'PUT', { quantita: v });
+        }
+        chiudi();
+        caricaSezione('materie-prime');
+    });
+
+    setTimeout(() => { ov.querySelector('#giacFiltro').focus(); }, 50);
 }
 
 // ── ACCORDION CONTENT ─────────────────────────────────────────────────────────
@@ -468,24 +658,8 @@ async function caricaMacchineCommessa(idCommessa) {
     aggiornaAltezzaPanel(tree);
 }
 
-async function caricaLavorazioniMacchina(idMacchina) {
-    const tree = document.getElementById('tree-macchina-' + idMacchina);
-    if (!tree) return;
-    tree.innerHTML = '<p class="tree-empty">Caricamento...</p>';
-
-    const res = await apiFetch('/macchine/' + idMacchina + '/albero');
-    if (!res || !res.ok) { tree.innerHTML = '<p class="tree-empty">Errore nel caricamento.</p>'; aggiornaAltezzaPanel(tree); return; }
-    const alb = await res.json();
-
-    const haProc = alb.lavorazioni && alb.lavorazioni.length;
-    const haDir  = alb.materiali_diretti && alb.materiali_diretti.length;
-    if (!haProc && !haDir) {
-        tree.innerHTML = '<p class="tree-empty">Nessun elemento. Apri la scheda macchina per aggiungere processi e materiali.</p>';
-        aggiornaAltezzaPanel(tree);
-        return;
-    }
-
-    tree.innerHTML = '';
+// Costruisce l'albero tipato (materiali/processi/semilavorati) di una macchina come elemento DOM
+function costruisciAlberoTipi(alb) {
     const cont = document.createElement('div');
     cont.className = 'albero-macchina';
 
@@ -517,16 +691,59 @@ async function caricaLavorazioniMacchina(idMacchina) {
 
     (alb.lavorazioni || []).forEach(l => rigaLavorazione(l, 0));
 
-    if (haDir) {
+    if (alb.materiali_diretti && alb.materiali_diretti.length) {
         const sep = document.createElement('div');
         sep.className = 'albero-sep';
         sep.textContent = 'Materiali diretti della macchina';
         cont.appendChild(sep);
         alb.materiali_diretti.forEach(rm => rigaMateriale(rm, 0));
     }
+    return cont;
+}
 
-    tree.appendChild(cont);
+async function caricaLavorazioniMacchina(idMacchina) {
+    const tree = document.getElementById('tree-macchina-' + idMacchina);
+    if (!tree) return;
+    tree.innerHTML = '<p class="tree-empty">Caricamento...</p>';
+
+    const res = await apiFetch('/macchine/' + idMacchina + '/albero');
+    if (!res || !res.ok) { tree.innerHTML = '<p class="tree-empty">Errore nel caricamento.</p>'; aggiornaAltezzaPanel(tree); return; }
+    const alb = await res.json();
+
+    const haProc = alb.lavorazioni && alb.lavorazioni.length;
+    const haDir  = alb.materiali_diretti && alb.materiali_diretti.length;
+    if (!haProc && !haDir) {
+        tree.innerHTML = '<p class="tree-empty">Nessun elemento. Apri la scheda macchina per aggiungere processi e materiali.</p>';
+        aggiornaAltezzaPanel(tree);
+        return;
+    }
+
+    tree.innerHTML = '';
+    tree.appendChild(costruisciAlberoTipi(alb));
     aggiornaAltezzaPanel(tree);
+}
+
+// Storico lavorazioni di una macchina (modale di sola lettura) — usato dalle macchine collassate
+async function apriStoricoMacchina(idMacchina, codice) {
+    const res = await apiFetch('/macchine/' + idMacchina + '/albero');
+    if (!res || !res.ok) { alert('Errore nel caricamento dello storico.'); return; }
+    const alb = await res.json();
+
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay open';
+    ov.innerHTML =
+        '<div class="modal modal-storico"><div class="modal-header">' +
+        '<h3><i class="fa-solid fa-clock-rotate-left"></i> Storico lavorazioni — ' + (codice ?? '') + '</h3>' +
+        '<button class="modal-close"><i class="fa-solid fa-xmark"></i></button></div>' +
+        '<div class="modal-body" id="storicoBody"></div>' +
+        '<div class="modal-footer"><button class="modal-btn-cancel">Chiudi</button></div></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('#storicoBody').appendChild(costruisciAlberoTipi(alb));
+
+    const chiudi = () => ov.remove();
+    ov.querySelector('.modal-close').addEventListener('click', chiudi);
+    ov.querySelector('.modal-btn-cancel').addEventListener('click', chiudi);
+    ov.addEventListener('click', e => { if (e.target === ov) chiudi(); });
 }
 
 // ── MODAL ─────────────────────────────────────────────────────────────────────
@@ -933,8 +1150,6 @@ async function apriModaleElemento(idMac, opts = {}) {
     const semilav   = (sl && sl.ok) ? await sl.json() : [];
 
     const procOpts = processi.map(p => '<option value="' + p.id + '">' + (p.descrizione ?? '-') + '</option>').join('');
-    const matOpts  = materiali.map(m => '<option value="' + m.id + '">' + (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') + '</option>').join('');
-    const semOpts  = semilav.map(s => '<option value="' + s.id + '">' + (s.codice || s.descrizione || '-') + '</option>').join('');
     const lavOpts  = lavs.map(l => '<option value="' + l.id + '">' + (l.descrizione ?? ('#' + l.id)) + '</option>').join('');
 
     const ov = document.createElement('div');
@@ -951,10 +1166,8 @@ async function apriModaleElemento(idMac, opts = {}) {
                 '<select id="el_proc"><option value="">Seleziona...</option>' + procOpts + '</select></div>' +
             '<div class="modal-field el-proc"><label>Processo precedente</label>' +
                 '<select id="el_prec"><option value="">— Nessuno (iniziale) —</option>' + lavOpts + '</select></div>' +
-            '<div class="modal-field el-mat"><label>Materia prima</label>' +
-                '<select id="el_mat"><option value="">Seleziona...</option>' + matOpts + '</select></div>' +
-            '<div class="modal-field el-sem"><label>Semilavorato</label>' +
-                '<select id="el_sem"><option value="">Seleziona...</option>' + semOpts + '</select></div>' +
+            '<div class="modal-field el-mat"><label>Materia prima</label><div class="el-mat-mount"></div></div>' +
+            '<div class="modal-field el-sem"><label>Semilavorato</label><div class="el-sem-mount"></div></div>' +
             '<div class="modal-field el-comp"><label>Quantità</label>' +
                 '<input type="number" id="el_qty" value="1" min="0.01" step="0.01"></div>' +
             '<div class="modal-field el-comp"><label>Posizione</label>' +
@@ -968,6 +1181,12 @@ async function apriModaleElemento(idMac, opts = {}) {
 
     const $  = s => ov.querySelector(s);
     const hide = (sel, h) => ov.querySelectorAll(sel).forEach(e => e.style.display = h ? 'none' : '');
+
+    // barre di ricerca al posto dei menu a tendina pieni di voci
+    const matCombo = creaAutocomplete(materiali.map(m => ({ value: String(m.id), label: (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') })), 'Cerca materia prima...');
+    const semCombo = creaAutocomplete(semilav.map(s => ({ value: String(s.id), label: (s.codice || s.descrizione || '-') })), 'Cerca semilavorato...');
+    $('.el-mat-mount').appendChild(matCombo);
+    $('.el-sem-mount').appendChild(semCombo);
     function aggiorna() {
         const tipo = $('#el_tipo').value;
         hide('.el-proc', tipo !== 'processo');
@@ -1010,15 +1229,15 @@ async function apriModaleElemento(idMac, opts = {}) {
                 if (!idLav) { alert('Seleziona il processo sotto cui inserire.'); return; }
             }
             if (tipo === 'materia') {
-                const idMat = $('#el_mat').value;
-                if (!idMat) { alert('Seleziona una materia prima.'); return; }
-                const payload = { id_materiale: Number(idMat), quantita: qty };
+                const selMat = matCombo.getValore();
+                if (!selMat) { alert('Cerca e seleziona una materia prima.'); return; }
+                const payload = { id_materiale: Number(selMat.value), quantita: qty };
                 r = sotto ? await apiFetch('/lavorazioni/' + idLav + '/rich_mat', 'POST', payload)
                           : await apiFetch('/macchine/' + idMac + '/rich_mat', 'POST', payload);
             } else { // semilavorato
-                const idSem = $('#el_sem').value;
-                if (!idSem) { alert('Seleziona un semilavorato.'); return; }
-                const payload = { id_semilavorato: Number(idSem), quantita: qty };
+                const selSem = semCombo.getValore();
+                if (!selSem) { alert('Cerca e seleziona un semilavorato.'); return; }
+                const payload = { id_semilavorato: Number(selSem.value), quantita: qty };
                 r = sotto ? await apiFetch('/lavorazioni/' + idLav + '/semilavorato', 'POST', payload)
                           : await apiFetch('/macchine/' + idMac + '/semilavorato', 'POST', payload);
             }
@@ -1084,7 +1303,12 @@ function _onBomFullscreenChange() {
 let _commessaCorrente = null;
 let _visCommessa = null;
 let _comNodeMeta = {};
-let _machineCollassate = new Set();   // commessa_macchina_id collassati (macchine completate "riposte")
+
+// Collasso macchina = persistente nel DB (campo collassata su commessa_macchine)
+async function collassaMacchina(cmId, val) {
+    const r = await apiFetch('/commessa-macchine/' + cmId + '/collassa', 'POST', { collassata: !!val });
+    if (r && r.ok && _commessaCorrente) caricaAlberoCommessa(_commessaCorrente);
+}
 
 // Una lavorazione è completa se il suo stato è COMPLETATA e tutti i sotto-processi lo sono
 function lavTuttoCompleto(lav) {
@@ -1114,7 +1338,6 @@ function calcolaProgresso(albero) {
 
 function apriVistaCommessa(c) {
     _commessaCorrente = c.id;
-    _machineCollassate = new Set();
     document.getElementById('commessaPanelTitle').textContent =
         'Commessa ' + (c.codice ?? '#' + c.id) + (c.descrizione ? ' — ' + c.descrizione : '');
     const fill0 = document.getElementById('commessaProgressFill');
@@ -1179,43 +1402,26 @@ async function caricaAlberoCommessa(idCommessa) {
         return '\n\n' + c.map(m => '•  ' + (m.codice ?? '-') + '    ×' + m.target).join('\n\n');
     };
 
+    // I materiali (a DESTRA) vengono prima dei sotto-processi, così stanno vicino al loro processo
     function getChildren(item) {
         if (item.tipo === 'commessa')    return item.macchine || [];
         if (item.tipo === 'macchina') {
-            if (_machineCollassate.has(item.commessa_macchina_id)) return [];   // collassata: nessun figlio
-            return [...(item.lavorazioni || []), ...matIncompleti(item)];
+            if (item.collassata) return [];   // collassata: nessun figlio
+            return [...matIncompleti(item), ...(item.lavorazioni || [])];
         }
-        if (item.tipo === 'lavorazione') return [...(item.figli || []), ...matIncompleti(item)];
+        if (item.tipo === 'lavorazione') return [...matIncompleti(item), ...(item.figli || [])];
         return [];
     }
 
-    // Layout: processi in sequenza verso destra; i MATERIALI di un processo
-    // elencati a lista verticale subito SOTTO la targhetta del processo.
-    const X_SEP = 240, ROW = 64, MAT_INDENT = 36;
+    // Layout: la materia prima (foglia) sta a DESTRA, il prodotto finale (commessa) a SINISTRA.
+    // Il flusso si legge destra→sinistra; ogni elemento è una colonna più a destra del suo padre.
+    const X_SEP = 240, ROW = 64;
     let cy = 0;
     function place(item, depth) {
         const x = depth * X_SEP;
-        if (item.tipo === 'rich_mat') {
-            item._px = x; item._py = cy; cy += ROW; return;
+        if (item.tipo === 'macchina' && item.collassata) {
+            item._px = x; item._py = cy; cy += ROW; return;   // collassata = foglia compatta
         }
-        if (item.tipo === 'lavorazione') {
-            // la targhetta del processo in cima, poi i materiali INCOMPLETI sotto, poi i sotto-processi a destra
-            item._px = x; item._py = cy; cy += ROW;
-            matIncompleti(item).forEach(mt => { mt._px = x + MAT_INDENT; mt._py = cy; cy += ROW; });
-            (item.figli || []).forEach(f => place(f, depth + 1));
-            return;
-        }
-        if (item.tipo === 'macchina') {
-            if (_machineCollassate.has(item.commessa_macchina_id)) {
-                item._px = x; item._py = cy; cy += ROW; return;   // collassata = foglia compatta
-            }
-            // materiali diretti incompleti sotto la macchina, processi a destra
-            item._px = x; item._py = cy; cy += ROW;
-            matIncompleti(item).forEach(mt => { mt._px = x + MAT_INDENT; mt._py = cy; cy += ROW; });
-            (item.lavorazioni || []).forEach(l => place(l, depth + 1));
-            return;
-        }
-        // commessa: centrata verticalmente sui figli
         const ch = getChildren(item);
         if (!ch.length) { item._px = x; item._py = cy; cy += ROW; return; }
         const start = cy;
@@ -1236,7 +1442,7 @@ async function caricaAlberoCommessa(idCommessa) {
             label = 'Commessa ' + (item.codice ?? '#' + item.id);
             _comNodeMeta[id] = { tipo: 'commessa' };
         } else if (item.tipo === 'macchina') {
-            const collassata = _machineCollassate.has(item.commessa_macchina_id);
+            const collassata = !!item.collassata;
             const completa = macchinaCompleta(item);
             if (collassata) {
                 bg = '#2e7d32'; border = '#1b5e20'; fc = '#fff';
@@ -1246,6 +1452,7 @@ async function caricaAlberoCommessa(idCommessa) {
                 label = (item.codice ?? '-') + '  ×' + (item.quantita ?? 1) + '\n' + (item.descrizione ?? '').substring(0, 22) + bulletList(item);
             }
             _comNodeMeta[id] = { tipo: 'macchina', cm: childCm, collapsed: collassata, completa: completa,
+                                 macchinaId: item.id, codice: item.codice,
                                  completi: matCompleti(item).map(m => ({ rm: m.rich_mat_id, codice: m.codice })) };
         } else if (item.tipo === 'lavorazione') {
             if (item.bloccato)                    { bg = '#eceff1'; border = '#b0bec5'; fc = '#90a4ae'; }
@@ -1268,14 +1475,15 @@ async function caricaAlberoCommessa(idCommessa) {
         }
 
         // macchina collassata = riquadro squadrato e compatto
-        const squared = (item.tipo === 'macchina' && _machineCollassate.has(item.commessa_macchina_id));
+        const squared = (item.tipo === 'macchina' && item.collassata);
         nodes.push(Object.assign({
             id, label, shape: 'box', x: item._px, y: item._py,
             color: { background: bg, border, highlight: { background: bg, border: '#e5006d' }, hover: { background: bg, border } },
             font: { color: fc, size: 12, face: 'Poppins, sans-serif', multi: false },
             borderWidth: bw, borderWidthSelected: bw + 1
         }, squared ? { shapeProperties: { borderRadius: 2 }, widthConstraint: { minimum: 72, maximum: 130 }, font: { color: fc, size: 12, face: 'Poppins, sans-serif', bold: true } } : {}));
-        if (parentId !== null) edges.push({ from: parentId, to: id });
+        // freccia invertita: punta dal figlio (destra) verso il padre (sinistra), cioè verso il prodotto finale
+        if (parentId !== null) edges.push({ from: id, to: parentId });
         getChildren(item).forEach(c => addNodo(c, id, childCm));
         return id;
     }
@@ -1332,26 +1540,27 @@ async function caricaAlberoCommessa(idCommessa) {
         const meta = _comNodeMeta[dragged];
         if (!meta) return;
         const cpos = _visCommessa.DOMtoCanvas(params.pointer.DOM);
-        const pos = _visCommessa.getPositions();
-        let nearest = null, best = Infinity;
-        Object.keys(pos).forEach(k => {
-            const nid = Number(k);
-            if (nid === dragged) return;
-            const d = Math.hypot(pos[nid].x - cpos.x, pos[nid].y - cpos.y);
-            if (d < best) { best = d; nearest = nid; }
-        });
-        const nearMeta = nearest !== null ? _comNodeMeta[nearest] : null;
+        // rilascio "dentro" un nodo = il punto cade nel suo riquadro allargato di un margine (PAD),
+        // così basta lasciare la targhetta o i suoi dintorni, non per forza sul testo
+        const PAD = 30;
+        const dentro = (visId, pad = PAD) => {
+            try {
+                const bb = _visCommessa.getBoundingBox(visId);
+                return bb && cpos.x >= bb.left - pad && cpos.x <= bb.right + pad
+                          && cpos.y >= bb.top - pad && cpos.y <= bb.bottom + pad;
+            } catch (e) { return false; }
+        };
 
         if (meta.tipo === 'rich_mat') {
-            if (nearest !== null && best < 95 && nearest === meta.targetVisId) fornisciMateriale(meta.cm, meta.rm);
+            // si rifornisce SOLO se rilasciata dentro la targhetta del SUO processo (mai un altro)
+            if (dentro(meta.targetVisId)) fornisciMateriale(meta.cm, meta.rm);
             else caricaAlberoCommessa(_commessaCorrente);   // snap-back
             return;
         }
         if (meta.tipo === 'macchina' && meta.completa && !meta.collapsed) {
-            if (nearMeta && nearMeta.tipo === 'commessa' && best < 140) {
-                _machineCollassate.add(meta.cm);
-            }
-            caricaAlberoCommessa(_commessaCorrente);
+            const comVis = Object.keys(_comNodeMeta).find(k => _comNodeMeta[k].tipo === 'commessa');
+            if (comVis != null && dentro(Number(comVis))) collassaMacchina(meta.cm, true);   // persistente + ricarica
+            else caricaAlberoCommessa(_commessaCorrente);                                     // snap-back
         }
     });
 
@@ -1363,16 +1572,19 @@ async function caricaAlberoCommessa(idCommessa) {
         if (!params.nodes.length) return;
         const meta = _comNodeMeta[params.nodes[0]];
         if (!meta) return;
+        // macchina collassata → menu con "occhio" (storico) e riapertura
         if (meta.tipo === 'macchina' && meta.collapsed) {
-            _machineCollassate.delete(meta.cm);
-            caricaAlberoCommessa(_commessaCorrente);
+            mostraComMenu([
+                { label: 'Storico lavorazioni', icon: 'fa-eye', action: () => apriStoricoMacchina(meta.macchinaId, meta.codice) },
+                { label: 'Riapri macchina', icon: 'fa-up-right-and-down-left-from-center', action: () => collassaMacchina(meta.cm, false) }
+            ], params.pointer.DOM);
             return;
         }
         let items = [];
         if (meta.tipo === 'rich_mat' && meta.fornito > 0) {
-            items = [{ label: 'Restituisci 1: ' + (meta.codice ?? ''), cm: meta.cm, rm: meta.rm }];
+            items = [{ label: 'Restituisci 1: ' + (meta.codice ?? ''), icon: 'fa-rotate-left', action: () => restituisciMateriale(meta.cm, meta.rm) }];
         } else if ((meta.tipo === 'lavorazione' || meta.tipo === 'macchina') && meta.completi && meta.completi.length) {
-            items = meta.completi.map(c => ({ label: 'Restituisci 1: ' + (c.codice ?? ''), cm: meta.cm, rm: c.rm }));
+            items = meta.completi.map(c => ({ label: 'Restituisci 1: ' + (c.codice ?? ''), icon: 'fa-rotate-left', action: () => restituisciMateriale(meta.cm, c.rm) }));
         }
         if (items.length) mostraComMenu(items, params.pointer.DOM);
     });
@@ -1392,7 +1604,7 @@ function mostraComMenu(items, domPos) {
     panel.id = 'comEditPanel';
     panel.className = 'bom-edit-panel';
     panel.innerHTML = items.map((it, i) =>
-        '<button data-i="' + i + '"><i class="fa-solid fa-rotate-left"></i> ' + it.label + '</button>'
+        '<button data-i="' + i + '"><i class="fa-solid ' + (it.icon || 'fa-rotate-left') + '"></i> ' + it.label + '</button>'
     ).join('');
     graph.appendChild(panel);
     const maxX = graph.clientWidth - panel.offsetWidth - 8;
@@ -1402,7 +1614,7 @@ function mostraComMenu(items, domPos) {
     panel.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
         const it = items[Number(b.dataset.i)];
         chiudiComMenu();
-        restituisciMateriale(it.cm, it.rm);
+        if (typeof it.action === 'function') it.action();
     }));
 }
 

@@ -235,27 +235,40 @@ def serializza_richmat_diretti_catalogo(id_macchina):
 
 
 def stato_lavorazione_cm(cm_id, cm_quantita, id_lav):
-    """Stato DERIVATO di una lavorazione per una macchina-in-commessa, dalle forniture.
-    Target di ogni materiale = quantita richiesta × n° macchine in commessa."""
-    richs = q_all(
-        "SELECT r.quantita, COALESCE(f.quantita_fornita, 0) AS fornita "
-        "FROM rich_mat r "
-        "LEFT JOIN fornitura_materiali f ON f.id_rich_mat = r.id AND f.id_commessa_macchina = :cm "
-        "WHERE r.id_lavorazione = :lav", cm=cm_id, lav=id_lav)
-    if not richs:
-        return "COMPLETATA"  # nessun materiale da conferire: non blocca la sequenza
+    """Stato DERIVATO di una lavorazione per una macchina-in-commessa.
+    Considera sia i MATERIALI diretti sia i SEMILAVORATI componenti (figli con id_semilavorato):
+    è COMPLETATA solo se tutti i materiali sono forniti E tutti i semilavorati componenti completati.
+    Target di ogni materiale = quantita richiesta × n° macchine in commessa. Ricorsivo per annidamenti."""
     completi = 0
-    parziali = 0
-    for r in richs:
+    iniziati = 0
+    totali = 0
+
+    for r in q_all(
+            "SELECT r.quantita, COALESCE(f.quantita_fornita, 0) AS fornita "
+            "FROM rich_mat r "
+            "LEFT JOIN fornitura_materiali f ON f.id_rich_mat = r.id AND f.id_commessa_macchina = :cm "
+            "WHERE r.id_lavorazione = :lav", cm=cm_id, lav=id_lav):
+        totali += 1
         target = r["quantita"] * cm_quantita
-        forn = r["fornita"]
-        if forn >= target:
+        if r["fornita"] >= target:
             completi += 1
-        elif forn > 0:
-            parziali += 1
-    if completi == len(richs):
+        elif r["fornita"] > 0:
+            iniziati += 1
+
+    # i figli che sono SEMILAVORATI (componenti) contano per il completamento del padre
+    for f in q_all("SELECT id FROM lavorazioni WHERE tav_padre = :id AND id_semilavorato IS NOT NULL", id=id_lav):
+        totali += 1
+        s = stato_lavorazione_cm(cm_id, cm_quantita, f["id"])
+        if s == "COMPLETATA":
+            completi += 1
+        elif s == "IN_CORSO":
+            iniziati += 1
+
+    if totali == 0:
+        return "COMPLETATA"   # niente da conferire né da produrre
+    if completi == totali:
         return "COMPLETATA"
-    if completi > 0 or parziali > 0:
+    if completi > 0 or iniziati > 0:
         return "IN_CORSO"
     return "IN_ATTESA"
 
@@ -304,7 +317,8 @@ def build_albero_commessa(cm, id_lav, padre_completo, visitati):
         "descrizione": desc_processo(lav),
         "tipo": "lavorazione",
         "stato": stato,
-        "bloccato": not padre_completo,   # sbloccato solo se il processo precedente è COMPLETATA
+        # un semilavorato si produce dai suoi materiali a prescindere dalla sequenza → mai bloccato
+        "bloccato": (not padre_completo) and not lav["id_semilavorato"],
         "rich_mat": materiali,
         "figli": figli
     }
@@ -553,7 +567,7 @@ def get_albero_commessa(id):
 
     macchine = []
     for cm in q_all(
-            "SELECT cm.id, cm.id_macchina, cm.quantita, m.codice, m.descrizione "
+            "SELECT cm.id, cm.id_macchina, cm.quantita, cm.collassata, m.codice, m.descrizione "
             "FROM commessa_macchine cm JOIN macchine m ON cm.id_macchina = m.id "
             "WHERE cm.id_commessa = :id", id=id):
         lavs = []
@@ -565,6 +579,7 @@ def get_albero_commessa(id):
             "commessa_macchina_id": cm["id"],
             "id": cm["id_macchina"], "codice": cm["codice"], "descrizione": cm["descrizione"],
             "quantita": cm["quantita"], "tipo": "macchina",
+            "collassata": bool(cm["collassata"]),
             "lavorazioni": lavs,
             "materiali_diretti": serializza_richmat_diretti_commessa(cm)
         })
@@ -574,6 +589,17 @@ def get_albero_commessa(id):
         "descrizione": commessa["descrizione"], "tipo": "commessa",
         "macchine": macchine
     }), 200
+
+@app.route("/commessa-macchine/<int:cm_id>/collassa", methods=["POST"])
+@jwt_required()
+def collassa_macchina(cm_id):
+    """Ripone (collassa) o riapre una macchina-in-commessa: stato persistente."""
+    if not q_one("SELECT id FROM commessa_macchine WHERE id = :id", id=cm_id):
+        return jsonify({"errore": "Commessa-macchina non trovata"}), 404
+    data = request.get_json() or {}
+    val = 1 if data.get("collassata") else 0
+    q_exec("UPDATE commessa_macchine SET collassata = :v WHERE id = :id", v=val, id=cm_id)
+    return jsonify({"messaggio": "Stato aggiornato", "collassata": bool(val)}), 200
 
 
 # ── FORNITURA MATERIALI (drag&drop operativo: scarico magazzino per commessa) ──
@@ -585,7 +611,7 @@ def _valida_fornitura(cm_id, rm_id):
     rm = q_one("SELECT id, id_lavorazione, id_macchina, id_materiale, quantita FROM rich_mat WHERE id = :id", id=rm_id)
     if not cm or not rm:
         return None, None, None, (jsonify({"errore": "Commessa-macchina o materiale non trovato"}), 404)
-    lav = q_one("SELECT id, id_macchina, tav_padre FROM lavorazioni WHERE id = :id", id=rm["id_lavorazione"]) if rm["id_lavorazione"] else None
+    lav = q_one("SELECT id, id_macchina, id_semilavorato, tav_padre FROM lavorazioni WHERE id = :id", id=rm["id_lavorazione"]) if rm["id_lavorazione"] else None
     macchina_del_mat = lav["id_macchina"] if lav else rm["id_macchina"]
     if macchina_del_mat != cm["id_macchina"]:
         return None, None, None, (jsonify({"errore": "Il materiale non appartiene a questa macchina"}), 400)
@@ -599,8 +625,11 @@ def fornisci_materiale(cm_id, rm_id):
     if err:
         return err
 
-    # Vincolo di sequenza: il processo precedente (tav_padre) dev'essere completato
-    if lav and lav["tav_padre"] and stato_lavorazione_cm(cm["id"], cm["quantita"], lav["tav_padre"]) != "COMPLETATA":
+    # Vincolo di sequenza: il processo precedente (tav_padre) dev'essere completato.
+    # NON si applica alla produzione di un semilavorato: si produce dai suoi materiali grezzi,
+    # a prescindere dalla sequenza di assemblaggio (altrimenti = deadlock).
+    if lav and lav["tav_padre"] and not lav["id_semilavorato"] \
+            and stato_lavorazione_cm(cm["id"], cm["quantita"], lav["tav_padre"]) != "COMPLETATA":
         return jsonify({"errore": "Il processo precedente non è ancora completato"}), 409
 
     target = rm["quantita"] * cm["quantita"]
