@@ -64,12 +64,14 @@ class ProcessoTipo(db.Model):
     descrizione = db.Column(db.String(255))
 
 class Lavorazione(db.Model):
-    """Istanza di un processo-tipo su una macchina, con sequenza via tav_padre."""
+    """Istanza di un processo-tipo su una macchina, con sequenza via tav_padre.
+    Se id_semilavorato è valorizzato, questa lavorazione rappresenta la produzione di un semilavorato."""
     __tablename__ = 'lavorazioni'
-    id          = db.Column(db.Integer, primary_key=True)
-    id_macchina = db.Column(db.Integer, db.ForeignKey('macchine.id'), nullable=False)
-    id_processo = db.Column(db.Integer, db.ForeignKey('processi_tipo.id'), nullable=True)
-    tav_padre   = db.Column(db.Integer, db.ForeignKey('lavorazioni.id'), nullable=True)
+    id              = db.Column(db.Integer, primary_key=True)
+    id_macchina     = db.Column(db.Integer, db.ForeignKey('macchine.id'), nullable=False)
+    id_processo     = db.Column(db.Integer, db.ForeignKey('processi_tipo.id'), nullable=True)
+    id_semilavorato = db.Column(db.Integer, db.ForeignKey('semilavorati.id'), nullable=True)
+    tav_padre       = db.Column(db.Integer, db.ForeignKey('lavorazioni.id'), nullable=True)
     # Nessuno stato: l'avanzamento è derivato per commessa dalle forniture (vedi FornituraMateriale)
 
 class Materiale(db.Model):
@@ -95,6 +97,23 @@ class FornituraMateriale(db.Model):
     id_commessa_macchina = db.Column(db.Integer, db.ForeignKey('commessa_macchine.id'), nullable=False)
     id_rich_mat          = db.Column(db.Integer, db.ForeignKey('rich_mat.id'), nullable=False)
     quantita_fornita     = db.Column(db.Integer, nullable=False, default=0)
+
+class Semilavorato(db.Model):
+    """Prodotto interno = una lavorazione applicata a dei componenti. Nessuna giacenza propria."""
+    __tablename__ = 'semilavorati'
+    id          = db.Column(db.Integer, primary_key=True)
+    codice      = db.Column(db.String(50))
+    descrizione = db.Column(db.String(255))
+    id_processo = db.Column(db.Integer, db.ForeignKey('processi_tipo.id'), nullable=True)
+
+class SemilavoratoComponente(db.Model):
+    """Riga di ricetta: un componente (materia prima O altro semilavorato) con quantità."""
+    __tablename__ = 'semilavorato_componenti'
+    id                   = db.Column(db.Integer, primary_key=True)
+    id_semilavorato      = db.Column(db.Integer, db.ForeignKey('semilavorati.id'), nullable=False)
+    id_materiale         = db.Column(db.Integer, db.ForeignKey('materialeMagazzino.id'), nullable=True)
+    id_semilavorato_comp = db.Column(db.Integer, db.ForeignKey('semilavorati.id'), nullable=True)
+    quantita             = db.Column(db.Float, nullable=False, default=1)
 
 class Utente(db.Model):
     __tablename__ = 'utenti'
@@ -122,7 +141,11 @@ def admin_required(f):
 # ── HELPER ALBERO ─────────────────────────────────────────────────────────────
 
 def desc_processo(lav):
-    """Descrizione di una lavorazione-istanza, presa dal catalogo ProcessoTipo."""
+    """Etichetta di una lavorazione-istanza: nome del semilavorato se la produce, altrimenti il processo-tipo."""
+    if lav.id_semilavorato:
+        s = Semilavorato.query.get(lav.id_semilavorato)
+        if s:
+            return s.descrizione or s.codice
     if lav.id_processo:
         p = ProcessoTipo.query.get(lav.id_processo)
         if p:
@@ -270,6 +293,44 @@ def serializza_richmat_diretti_commessa(cm):
     return out
 
 
+def progresso_commessa(id_commessa):
+    """Percentuale di avanzamento: unità fornite / unità totali sui materiali foglia della commessa."""
+    forn = 0.0
+    tot = 0.0
+    for cm in CommessaMacchina.query.filter_by(id_commessa=id_commessa).all():
+        lav_ids = [l.id for l in Lavorazione.query.filter_by(id_macchina=cm.id_macchina).all()]
+        richs = list(RichMat.query.filter_by(id_macchina=cm.id_macchina, id_lavorazione=None).all())
+        if lav_ids:
+            richs += RichMat.query.filter(RichMat.id_lavorazione.in_(lav_ids)).all()
+        for r in richs:
+            target = r.quantita * cm.quantita
+            f = FornituraMateriale.query.filter_by(id_commessa_macchina=cm.id, id_rich_mat=r.id).first()
+            forn += min(f.quantita_fornita if f else 0, target)
+            tot += target
+    return round(100 * forn / tot) if tot > 0 else 0
+
+
+def espandi_semilavorato(id_sem, id_macchina, tav_padre, mult, visitati):
+    """Istanzia la ricetta di un semilavorato come sotto-albero di lavorazioni+materiali sulla macchina.
+    Ricorsivo (con anti-ciclo) per semilavorati annidati. Solo le materie prime foglia hanno stock."""
+    if id_sem in visitati:
+        return None
+    visitati = visitati | {id_sem}
+    s = Semilavorato.query.get(id_sem)
+    if not s:
+        return None
+    lav = Lavorazione(id_macchina=id_macchina, id_processo=s.id_processo, id_semilavorato=s.id, tav_padre=tav_padre)
+    db.session.add(lav)
+    db.session.flush()  # serve lav.id
+    for comp in SemilavoratoComponente.query.filter_by(id_semilavorato=id_sem).all():
+        q = (comp.quantita or 1) * mult
+        if comp.id_semilavorato_comp:
+            espandi_semilavorato(comp.id_semilavorato_comp, id_macchina, lav.id, q, visitati)
+        elif comp.id_materiale:
+            db.session.add(RichMat(id_lavorazione=lav.id, id_materiale=comp.id_materiale, quantita=q))
+    return lav
+
+
 # ── HOME ──────────────────────────────────────────────────────────────────────
 
 @app.route("/", methods=["GET"])
@@ -361,7 +422,8 @@ def get_commesse():
         "descrizione": c.descrizione,
         "anno": c.anno,
         "data_consegna": c.data_consegna.isoformat() if c.data_consegna else None,
-        "stato": c.stato_chiusura
+        "stato": c.stato_chiusura,
+        "progresso": progresso_commessa(c.id)
     } for c in Commessa.query.all()])
 
 @app.route("/commesse", methods=["POST"])
@@ -717,6 +779,138 @@ def elimina_processo(id):
     db.session.delete(p)
     db.session.commit()
     return jsonify({"messaggio": "Processo eliminato"}), 200
+
+
+# ── SEMILAVORATI (catalogo: lavorazione + componenti) ─────────────────────────
+
+@app.route("/semilavorati", methods=["GET"])
+@jwt_required()
+def get_semilavorati():
+    out = []
+    for s in Semilavorato.query.all():
+        p = ProcessoTipo.query.get(s.id_processo) if s.id_processo else None
+        out.append({
+            "id": s.id, "codice": s.codice, "descrizione": s.descrizione,
+            "id_processo": s.id_processo, "processo": p.descrizione if p else None
+        })
+    return jsonify(out)
+
+@app.route("/semilavorati", methods=["POST"])
+@jwt_required()
+def crea_semilavorato():
+    data = request.get_json()
+    if not data or not data.get("descrizione"):
+        return jsonify({"errore": "descrizione obbligatoria"}), 400
+    nuovo = Semilavorato(codice=data.get("codice"), descrizione=data.get("descrizione"), id_processo=data.get("id_processo") or None)
+    db.session.add(nuovo)
+    db.session.commit()
+    return jsonify({"messaggio": "Semilavorato creato", "id": nuovo.id}), 201
+
+@app.route("/semilavorati/<int:id>", methods=["PUT"])
+@jwt_required()
+def modifica_semilavorato(id):
+    s = Semilavorato.query.get(id)
+    if not s:
+        return jsonify({"errore": "Semilavorato non trovato"}), 404
+    data = request.get_json() or {}
+    s.codice      = data.get("codice", s.codice)
+    s.descrizione = data.get("descrizione", s.descrizione)
+    if "id_processo" in data:
+        s.id_processo = data.get("id_processo") or None
+    db.session.commit()
+    return jsonify({"messaggio": "Semilavorato aggiornato"}), 200
+
+@app.route("/semilavorati/<int:id>", methods=["DELETE"])
+@jwt_required()
+def elimina_semilavorato(id):
+    s = Semilavorato.query.get(id)
+    if not s:
+        return jsonify({"errore": "Semilavorato non trovato"}), 404
+    usi_lav = Lavorazione.query.filter_by(id_semilavorato=id).count()
+    usi_comp = SemilavoratoComponente.query.filter_by(id_semilavorato_comp=id).count()
+    if usi_lav or usi_comp:
+        return jsonify({"errore": "Semilavorato in uso (in macchine o in altre ricette): rimuovilo prima da lì."}), 409
+    SemilavoratoComponente.query.filter_by(id_semilavorato=id).delete()
+    db.session.delete(s)
+    db.session.commit()
+    return jsonify({"messaggio": "Semilavorato eliminato"}), 200
+
+@app.route("/semilavorati/<int:id>/componenti", methods=["GET"])
+@jwt_required()
+def get_componenti_semilavorato(id):
+    out = []
+    for comp in SemilavoratoComponente.query.filter_by(id_semilavorato=id).all():
+        if comp.id_semilavorato_comp:
+            sc = Semilavorato.query.get(comp.id_semilavorato_comp)
+            out.append({"id": comp.id, "tipo": "semilavorato", "rif_id": comp.id_semilavorato_comp,
+                        "codice": sc.codice if sc else None, "descrizione": sc.descrizione if sc else None,
+                        "quantita": comp.quantita})
+        else:
+            mat = Materiale.query.get(comp.id_materiale)
+            out.append({"id": comp.id, "tipo": "materiale", "rif_id": comp.id_materiale,
+                        "codice": mat.CodiceMateriale if mat else None, "descrizione": mat.Descrizione if mat else None,
+                        "quantita": comp.quantita})
+    return jsonify(out), 200
+
+@app.route("/semilavorati/<int:id>/componenti", methods=["POST"])
+@jwt_required()
+def aggiungi_componente_semilavorato(id):
+    if not Semilavorato.query.get(id):
+        return jsonify({"errore": "Semilavorato non trovato"}), 404
+    data = request.get_json() or {}
+    qty = float(data.get("quantita", 1))
+    if qty <= 0:
+        return jsonify({"errore": "Quantità deve essere maggiore di zero"}), 400
+    id_mat = data.get("id_materiale")
+    id_sem = data.get("id_semilavorato_comp")
+    if not id_mat and not id_sem:
+        return jsonify({"errore": "Specifica un materiale o un semilavorato"}), 400
+    if id_sem and int(id_sem) == id:
+        return jsonify({"errore": "Un semilavorato non può contenere se stesso"}), 400
+    comp = SemilavoratoComponente(id_semilavorato=id, id_materiale=id_mat or None,
+                                  id_semilavorato_comp=id_sem or None, quantita=qty)
+    db.session.add(comp)
+    db.session.commit()
+    return jsonify({"messaggio": "Componente aggiunto", "id": comp.id}), 201
+
+@app.route("/semilavorato_componenti/<int:id>", methods=["DELETE"])
+@jwt_required()
+def elimina_componente_semilavorato(id):
+    comp = SemilavoratoComponente.query.get(id)
+    if not comp:
+        return jsonify({"errore": "Componente non trovato"}), 404
+    db.session.delete(comp)
+    db.session.commit()
+    return jsonify({"messaggio": "Componente rimosso"}), 200
+
+@app.route("/lavorazioni/<int:id>/semilavorato", methods=["POST"])
+@jwt_required()
+def aggiungi_semilavorato_lavorazione(id):
+    """Aggiunge (espandendo) un semilavorato come sotto-processo di una lavorazione."""
+    lav = Lavorazione.query.get(id)
+    if not lav:
+        return jsonify({"errore": "Lavorazione non trovata"}), 404
+    data = request.get_json() or {}
+    if not data.get("id_semilavorato"):
+        return jsonify({"errore": "id_semilavorato obbligatorio"}), 400
+    qty = float(data.get("quantita", 1))
+    espandi_semilavorato(data["id_semilavorato"], lav.id_macchina, lav.id, qty, set())
+    db.session.commit()
+    return jsonify({"messaggio": "Semilavorato aggiunto"}), 201
+
+@app.route("/macchine/<int:id>/semilavorato", methods=["POST"])
+@jwt_required()
+def aggiungi_semilavorato_macchina(id):
+    """Aggiunge (espandendo) un semilavorato direttamente sulla macchina (processo radice)."""
+    if not Macchina.query.get(id):
+        return jsonify({"errore": "Macchina non trovata"}), 404
+    data = request.get_json() or {}
+    if not data.get("id_semilavorato"):
+        return jsonify({"errore": "id_semilavorato obbligatorio"}), 400
+    qty = float(data.get("quantita", 1))
+    espandi_semilavorato(data["id_semilavorato"], id, None, qty, set())
+    db.session.commit()
+    return jsonify({"messaggio": "Semilavorato aggiunto"}), 201
 
 
 # ── LAVORAZIONI (istanze di processo su macchina) ─────────────────────────────

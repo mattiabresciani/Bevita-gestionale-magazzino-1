@@ -2794,13 +2794,142 @@ div.vis-network div.vis-navigation div.vis-button:active {
     min-height: 0;
 }
 
+/* Barra di progresso compatta sulla card commessa (tab Commesse) */
+.card-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 150px;
+    flex-shrink: 0;
+    margin-right: 8px;
+}
+.card-progress-track {
+    flex: 1;
+    height: 8px;
+    background: #eceff3;
+    border-radius: 50px;
+    overflow: hidden;
+}
+.card-progress-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 50px;
+    background: linear-gradient(90deg, #ffb300, #ff8f00);
+    transition: width 0.4s ease;
+}
+.card-progress-fill.cpf-done { background: linear-gradient(90deg, #43a047, #2e7d32); }
+.card-progress-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #666;
+    min-width: 34px;
+    text-align: right;
+}
+
+/* Barra di progresso della commessa (sotto l'header dell'overlay) */
+.commessa-progress {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 28px;
+    background: #fff;
+    border-bottom: 1px solid var(--clr-border);
+    flex-shrink: 0;
+}
+.commessa-progress .cpb-track {
+    flex: 1;
+    height: 12px;
+    background: #eceff3;
+    border-radius: 50px;
+    overflow: hidden;
+}
+.commessa-progress .cpb-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 50px;
+    background: linear-gradient(90deg, #ffb300, #ff8f00);
+    transition: width 0.4s ease;
+}
+.commessa-progress .cpb-fill.cpb-done {
+    background: linear-gradient(90deg, #43a047, #2e7d32);
+}
+.commessa-progress .cpb-label {
+    font-size: 14px;
+    font-weight: 700;
+    color: #444;
+    min-width: 44px;
+    text-align: right;
+}
+
 /* Grafo BOM della commessa (vis.js) a tutta area */
 .commessa-bom-graph {
     width: 100%;
     height: 100%;
     position: relative;
     overflow: hidden;
+    background:
+        radial-gradient(circle, #e9e9ee 1px, transparent 1px) 0 0 / 22px 22px,
+        #fbfbfd;
 }
+
+/* Legenda colori (overlay in basso a sinistra) */
+.bom-legend {
+    position: absolute;
+    left: 14px;
+    bottom: 14px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    background: rgba(255,255,255,0.94);
+    border: 1px solid var(--clr-border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #555;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    max-width: calc(100% - 28px);
+}
+.bom-legend .dot {
+    display: inline-block;
+    width: 11px; height: 11px;
+    border-radius: 3px;
+    margin-right: 2px;
+    margin-left: 8px;
+    border: 1.5px solid;
+    vertical-align: -1px;
+}
+.bom-legend .dot:first-child { margin-left: 0; }
+.dot-attesa { background: #f5f5f5; border-color: #bdbdbd; }
+.dot-corso  { background: #fff8e1; border-color: #ffb300; }
+.dot-done   { background: #e8f5e9; border-color: #43a047; }
+.dot-lock   { background: #eceff1; border-color: #b0bec5; }
+.bom-legend-hint {
+    margin-left: 10px;
+    padding-left: 12px;
+    border-left: 1px solid var(--clr-border);
+    color: #999;
+    font-style: italic;
+}
+.bom-legend-hint i { color: var(--primary-pink); margin-right: 4px; }
+
+/* Pulsante ricentra (overlay in alto a destra) */
+.bom-fit-btn {
+    position: absolute;
+    top: 14px; right: 14px;
+    z-index: 10;
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--clr-border);
+    background: rgba(255,255,255,0.94);
+    color: #555;
+    cursor: pointer;
+    font-size: 15px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    transition: background 0.15s, color 0.15s;
+}
+.bom-fit-btn:hover { background: #ffe0ec; color: var(--primary-pink); border-color: #f5b8d0; }
 
 /* Grafico unico della commessa: radice + rami (macchine) collegati */
 .op-commessa-graph { position: relative; }
