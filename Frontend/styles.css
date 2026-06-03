@@ -580,14 +580,20 @@ body.login-page * {
 }
 
 .accordion-arrow {
-    font-size: 28px;
+    font-size: 30px;
     font-weight: bold;
     color: var(--clr-dash-text);
-    transition: transform 0.2s ease;
-    display: inline-block;
-    width: 20px;
-    text-align: center;
+    transition: transform 0.2s ease, background-color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    cursor: pointer;
 }
+.accordion-header:hover .accordion-arrow { background-color: #ececec; }
 
 /* Quando la tendina è attiva la freccia ruota verso il basso */
 .commessa-card-accordion.active .accordion-arrow {
@@ -661,7 +667,7 @@ body.login-page * {
    ========================================================================== */
 .card-actions {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     margin-left: auto;
     padding-right: 20px;
 }
@@ -671,23 +677,27 @@ body.login-page * {
 }
 
 .action-btn {
-    background: none;
-    border: none;
+    background: #f3f4f7;
+    border: 1px solid #e2e5ea;
     cursor: pointer;
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
+    width: 44px;
+    height: 44px;
+    border-radius: 11px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
-    transition: background-color 0.15s, color 0.15s;
+    font-size: 18px;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
 }
+.action-btn:hover { transform: translateY(-1px); }
+.action-btn:active { transform: translateY(0); }
 
 .edit-btn { color: #555; }
-.edit-btn:hover { background-color: #e0e0e0; color: #1c1c1c; }
-.delete-btn { color: #aaa; }
-.delete-btn:hover { background-color: #ffe0ec; color: var(--primary-pink); }
+.edit-btn:hover { background-color: #e6e8ec; color: #1c1c1c; border-color: #cfd3da; }
+.delete-btn { color: #9a9a9a; }
+.delete-btn:hover { background-color: #ffe0ec; color: var(--primary-pink); border-color: #f5b8d0; }
+.btn-grafo-commessa { color: #5e6b85; }
+.btn-grafo-commessa:hover { background-color: #ede9ff; color: #5e35b1; border-color: #c5b8f5; }
 
 .badge-aperta {
     background-color: #e6f9ee;
@@ -2805,8 +2815,9 @@ div.vis-network div.vis-navigation div.vis-button:active {
 }
 .card-progress-track {
     flex: 1;
-    height: 8px;
-    background: #eceff3;
+    height: 9px;
+    background: #d4d9e2;
+    border: 1px solid #b9c0cc;
     border-radius: 50px;
     overflow: hidden;
 }
@@ -2839,7 +2850,8 @@ div.vis-network div.vis-navigation div.vis-button:active {
 .commessa-progress .cpb-track {
     flex: 1;
     height: 12px;
-    background: #eceff3;
+    background: #d4d9e2;
+    border: 1px solid #b9c0cc;
     border-radius: 50px;
     overflow: hidden;
 }

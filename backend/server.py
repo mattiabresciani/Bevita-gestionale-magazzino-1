@@ -214,6 +214,7 @@ def build_albero_lavorazione(id_lav, visitati):
         "id": lav["id"],
         "descrizione": desc_processo(lav),
         "tipo": "lavorazione",
+        "semilavorato": bool(lav["id_semilavorato"]),
         "rich_mat": materiali,
         "figli": figli
     }

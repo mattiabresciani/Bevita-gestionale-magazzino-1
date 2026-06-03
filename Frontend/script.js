@@ -473,32 +473,59 @@ async function caricaLavorazioniMacchina(idMacchina) {
     if (!tree) return;
     tree.innerHTML = '<p class="tree-empty">Caricamento...</p>';
 
-    const res = await apiFetch('/macchine/' + idMacchina + '/lavorazioni');
-    if (!res) return;
-    const lavorazioni = await res.json();
+    const res = await apiFetch('/macchine/' + idMacchina + '/albero');
+    if (!res || !res.ok) { tree.innerHTML = '<p class="tree-empty">Errore nel caricamento.</p>'; aggiornaAltezzaPanel(tree); return; }
+    const alb = await res.json();
 
-    if (!lavorazioni.length) {
-        tree.innerHTML = '<p class="tree-empty">Nessuna lavorazione associata.</p>';
+    const haProc = alb.lavorazioni && alb.lavorazioni.length;
+    const haDir  = alb.materiali_diretti && alb.materiali_diretti.length;
+    if (!haProc && !haDir) {
+        tree.innerHTML = '<p class="tree-empty">Nessun elemento. Apri la scheda macchina per aggiungere processi e materiali.</p>';
         aggiornaAltezzaPanel(tree);
         return;
     }
 
     tree.innerHTML = '';
-    const branch = document.createElement('div');
-    branch.className = 'tree-branch';
-    branch.appendChild(Object.assign(document.createElement('span'), { className: 'tree-line' }));
+    const cont = document.createElement('div');
+    cont.className = 'albero-macchina';
 
-    lavorazioni.forEach(l => {
-        const item = document.createElement('div');
-        item.className = 'tree-item';
-        item.innerHTML =
-            '<span class="tree-dot">&#9632;</span>' +
-            '<span class="material-code">' + (l.descrizione ?? '-') + '</span>' +
-            (l.tav_padre ? '<span class="material-quantity">dopo #' + l.tav_padre + '</span>' : '<span class="material-quantity">iniziale</span>');
-        branch.appendChild(item);
-    });
+    function rigaMateriale(rm, depth) {
+        const row = document.createElement('div');
+        row.className = 'albero-row tipo-materiale';
+        row.style.marginLeft = (depth * 22) + 'px';
+        row.innerHTML =
+            '<span class="albero-chip chip-materiale"><i class="fa-solid fa-cube"></i> Materiale</span>' +
+            '<span class="albero-nome">' + (rm.codice ?? '-') + '</span>' +
+            '<span class="albero-desc">' + (rm.descrizione ?? '') + '</span>' +
+            '<span class="albero-qty">×' + (rm.quantita_richiesta ?? 1) + '</span>';
+        cont.appendChild(row);
+    }
+    function rigaLavorazione(lav, depth) {
+        const isSem = !!lav.semilavorato;
+        const row = document.createElement('div');
+        row.className = 'albero-row ' + (isSem ? 'tipo-semilav' : 'tipo-processo');
+        row.style.marginLeft = (depth * 22) + 'px';
+        row.innerHTML =
+            (isSem
+                ? '<span class="albero-chip chip-semilav"><i class="fa-solid fa-cubes-stacked"></i> Semilavorato</span>'
+                : '<span class="albero-chip chip-processo"><i class="fa-solid fa-screwdriver-wrench"></i> Processo</span>') +
+            '<span class="albero-nome">' + (lav.descrizione ?? '-') + '</span>';
+        cont.appendChild(row);
+        (lav.rich_mat || []).forEach(rm => rigaMateriale(rm, depth + 1));
+        (lav.figli || []).forEach(f => rigaLavorazione(f, depth + 1));
+    }
 
-    tree.appendChild(branch);
+    (alb.lavorazioni || []).forEach(l => rigaLavorazione(l, 0));
+
+    if (haDir) {
+        const sep = document.createElement('div');
+        sep.className = 'albero-sep';
+        sep.textContent = 'Materiali diretti della macchina';
+        cont.appendChild(sep);
+        alb.materiali_diretti.forEach(rm => rigaMateriale(rm, 0));
+    }
+
+    tree.appendChild(cont);
     aggiornaAltezzaPanel(tree);
 }
 
