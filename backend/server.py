@@ -6,7 +6,7 @@ from functools import wraps
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 from dotenv import load_dotenv
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -24,6 +24,8 @@ jwt = JWTManager(app)
 _BASE = os.path.dirname(os.path.abspath(__file__))
 MACHINE_IMG_DIR = os.path.join(_BASE, '..', 'Frontend', 'machineImg')
 MACHINE_ST_DIR  = os.path.join(_BASE, '..', 'Frontend', 'machineST')
+LOG_DIR         = os.path.join(_BASE, 'log')
+LOG_GIORNI      = 15   # ritenzione: i log più vecchi di 15 giorni vengono cancellati
 
 
 # ── ACCESSO AL DB CON SQL ESPLICITO ───────────────────────────────────────────
@@ -163,6 +165,90 @@ def admin_required(f):
             return jsonify({"errore": "Accesso negato: permessi insufficienti"}), 403
         return f(*args, **kwargs)
     return decorated
+
+
+# ── LOG ATTIVITÀ ──────────────────────────────────────────────────────────────
+# Registra in backend/log/AAAA-MM-GG.log chi (utente), quando, in che sezione e
+# cosa ha fatto. I file più vecchi di LOG_GIORNI vengono eliminati automaticamente.
+
+_ultima_pulizia_log = None
+
+def pulisci_log_vecchi():
+    """Elimina i file di log con data più vecchia di LOG_GIORNI giorni."""
+    if not os.path.isdir(LOG_DIR):
+        return
+    limite = datetime.now().date() - timedelta(days=LOG_GIORNI)
+    for nome in os.listdir(LOG_DIR):
+        if not nome.endswith('.log'):
+            continue
+        try:
+            data_file = datetime.strptime(nome[:-4], '%Y-%m-%d').date()
+        except ValueError:
+            continue
+        if data_file < limite:
+            try:
+                os.remove(os.path.join(LOG_DIR, nome))
+            except OSError:
+                pass
+
+def scrivi_log(utente, ruolo, sezione, azione, esito):
+    """Aggiunge una riga al log del giorno; lancia la pulizia al massimo una volta al giorno."""
+    global _ultima_pulizia_log
+    os.makedirs(LOG_DIR, exist_ok=True)
+    oggi = datetime.now().strftime('%Y-%m-%d')
+    if _ultima_pulizia_log != oggi:
+        pulisci_log_vecchi()
+        _ultima_pulizia_log = oggi
+    riga = "%s | utente=%s (%s) | sezione=%s | azione=%s | esito=%s\n" % (
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utente, ruolo, sezione, azione, esito)
+    try:
+        with open(os.path.join(LOG_DIR, oggi + '.log'), 'a', encoding='utf-8') as f:
+            f.write(riga)
+    except OSError:
+        pass
+
+def _sezione_da_path(path):
+    """Mappa il percorso della richiesta a una sezione leggibile."""
+    if path.startswith('/login'):              return 'Login'
+    if path.startswith('/commessa-macchine'):  return 'Produzione (commessa)'
+    if path.startswith('/commesse'):           return 'Commesse'
+    if path.startswith('/macchine'):           return 'Macchine'
+    if path.startswith('/processi') or path.startswith('/lavorazioni'):
+        return 'Lavorazioni'
+    if path.startswith('/semilavorat'):        return 'Semilavorati'
+    if path.startswith('/rich_mat'):           return 'Materiali richiesti'
+    if path.startswith('/materiale'):          return 'Materie Prime'
+    if path.startswith('/clienti'):            return 'Clienti'
+    if path.startswith('/utenti'):             return 'Utenti'
+    return 'Altro'
+
+def _utente_corrente():
+    """Recupera utente e ruolo dal token JWT, se presente."""
+    try:
+        verify_jwt_in_request(optional=True)
+        ident = get_jwt_identity()
+        if ident:
+            return ident, get_jwt().get("ruolo", "-")
+    except Exception:
+        pass
+    return None, None
+
+@app.after_request
+def registra_azione(response):
+    """Logga ogni azione di scrittura (POST/PUT/DELETE) e i tentativi di login."""
+    try:
+        if request.method in ('POST', 'PUT', 'DELETE'):
+            if request.path == '/login':
+                body = request.get_json(silent=True) or {}
+                utente, ruolo = body.get('username') or 'anonimo', '-'
+            else:
+                utente, ruolo = _utente_corrente()
+                utente, ruolo = (utente or 'anonimo'), (ruolo or '-')
+            scrivi_log(utente, ruolo, _sezione_da_path(request.path),
+                       request.method + ' ' + request.path, response.status_code)
+    except Exception:
+        pass
+    return response
 
 
 # ── HELPER ALBERO ─────────────────────────────────────────────────────────────
@@ -1204,6 +1290,8 @@ def elimina_utente(id):
 
 with app.app_context():
     db.create_all()
+    os.makedirs(LOG_DIR, exist_ok=True)
+    pulisci_log_vecchi()
     print("[DB] Database pronto.")
 
 if __name__ == "__main__":

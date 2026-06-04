@@ -7,3 +7,6 @@ __pycache__/
 .venv/
 venv/
 
+
+# Log attività (rigenerati a runtime, ritenzione 15gg)
+backend/log/
