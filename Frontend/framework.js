@@ -513,7 +513,7 @@ const SCAFFALE_COL_POS = {
     8: { l: 85.7, w: 11.8 }
 };
 
-const SCAFFALE_KEY  = 'scaffalatura_celle';
+const SCAFFALE_KEY  = 'scaffalatura_celle'; 
 const SCAFFALE_ROWS = ['D', 'C', 'B', 'A'];
 const SCAFFALE_COLS = [1, 2, 3, 4, 5, 6, 7, 8];
 
@@ -531,19 +531,22 @@ function scaffaleMigraCella(val) {
     return { commessa: val, materiali: [] };
 }
 
+// Carica e deserializza le celle dello scaffale dal localStorage, migrando eventuali dati nel vecchio formato.
 function scaffaleLoadCelle() {
     try {
         const raw = JSON.parse(localStorage.getItem(SCAFFALE_KEY)) || {};
         const out = {};
         Object.entries(raw).forEach(([k, v]) => { out[k] = scaffaleMigraCella(v); });
-        return out;
+        return out; 
     } catch { return {}; }
 }
 
+// Serializza e salva le celle dello scaffale nel localStorage.
 function scaffaleSaveCelle(c) {
     localStorage.setItem(SCAFFALE_KEY, JSON.stringify(c));
 }
 
+// GET autenticata verso il backend: aggiunge il token JWT e lancia un'eccezione se la risposta non è ok.
 async function scaffaleGet(path) {
     const r = await fetch('http://localhost:5001' + path, {
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
@@ -552,8 +555,10 @@ async function scaffaleGet(path) {
     return r.json();
 }
 
-// ── Overlay celle sulla foto ───────────────────────────────────────
+// ── Overlay celle sulla foto ─────────────────────────────────── 
 
+// Costruisce le celle cliccabili sovrapposte alla foto dello scaffale usando posizioni percentuali;
+// mostra commessa assegnata e conteggio materiali in ogni cella occupata, più etichette riga/colonna.
 function scaffaleBuildOverlay() {
     const overlay = document.getElementById('shelfOverlay');
     if (!overlay) return;
@@ -630,6 +635,8 @@ function scaffaleBuildOverlay() {
 
 // ── Modal assegnazione cella ───────────────────────────────────────
 
+// Apre il modal di assegnazione per la cella `id`: precarica la commessa attuale e
+// inizializza la lista temporanea dei materiali (scaffaleTempMat) con quelli già salvati.
 function scaffaleOpenCellModal(id) {
     scaffaleActiveCellId = id;
     document.getElementById('caTitle').textContent = 'Cella ' + id;
@@ -673,6 +680,8 @@ function scaffaleOpenCellModal(id) {
     document.getElementById('cellAssignOverlay').classList.add('open');
 }
 
+// Aggiorna la lista materiali temporanei (scaffaleTempMat) nel modal di assegnazione cella;
+// collega il pulsante "×" per rimuovere ogni voce.
 function scaffaleRenderMatList() {
     const list = document.getElementById('caMatList');
     if (!list) return;
@@ -696,6 +705,8 @@ function scaffaleRenderMatList() {
     });
 }
 
+// Aggiunge il materiale selezionato (con la quantità indicata) alla lista temporanea della cella;
+// se il materiale è già presente, ne somma la quantità anziché duplicarlo.
 function scaffaleAddMatToTemp() {
     const sel  = document.getElementById('caMatSel');
     const qtyEl = document.getElementById('caMatQty');
@@ -714,6 +725,7 @@ function scaffaleAddMatToTemp() {
     scaffaleRenderMatList();
 }
 
+// Chiude il modal di assegnazione cella e resetta l'id attivo e la lista materiali temporanei.
 function scaffaleCloseCellModal() {
     document.getElementById('cellAssignOverlay').classList.remove('open');
     scaffaleActiveCellId = null;
@@ -722,6 +734,8 @@ function scaffaleCloseCellModal() {
 
 // ── Ricerca: commesse + materiali ──────────────────────────────────
 
+// Inizializza la barra di ricerca: filtra commesse e materiali in tempo reale e mostra un
+// dropdown con i risultati; al click su un risultato apre il popup di dettaglio relativo.
 function scaffaleInitSearch() {
     const input    = document.getElementById('scaffaleSearchInput');
     const dropdown = document.getElementById('scaffaleSearchDropdown');
@@ -778,12 +792,15 @@ function scaffaleInitSearch() {
     });
 }
 
+// Rimuove la classe "highlighted" da tutte le celle dello scaffale.
 function scaffaleClearHighlights() {
     document.querySelectorAll('.shelf-cell.highlighted').forEach(c => c.classList.remove('highlighted'));
 }
 
 // ── Popup commessa ─────────────────────────────────────────────────
 
+// Apre il popup di dettaglio di una commessa: evidenzia le celle che la contengono e
+// carica da API macchine e materiali necessari, poi delega il rendering a scaffaleRenderCommessaPopup.
 async function scaffaleOpenCommessaPopup(comm) {
     document.getElementById('spCodice').textContent = comm.codice;
     document.getElementById('spDesc').textContent   = comm.descrizione || '';
@@ -817,6 +834,8 @@ async function scaffaleOpenCommessaPopup(comm) {
     }
 }
 
+// Popola il corpo del popup commessa con: celle occupate, badge stato/anno,
+// elenco macchine e per ciascuna i materiali con indicatore di stock (ok/scarso/esaurito).
 function scaffaleRenderCommessaPopup(comm, celleOcc, macchineConMat) {
     let h = '';
 
@@ -875,6 +894,8 @@ function scaffaleRenderCommessaPopup(comm, celleOcc, macchineConMat) {
 
 // ── Popup materiale ────────────────────────────────────────────────
 
+// Apre il popup di dettaglio di un materiale: evidenzia le celle dove è fisicamente presente
+// (localStorage) e cerca via API le commesse/macchine che lo richiedono.
 async function scaffaleOpenMaterialePopup(mat) {
     document.getElementById('spCodice').textContent = mat.codice;
     document.getElementById('spDesc').textContent   = mat.descrizione || '';
@@ -915,6 +936,8 @@ async function scaffaleOpenMaterialePopup(mat) {
     }
 }
 
+// Popola il corpo del popup materiale con: celle in cui è presente (con commessa e quantità)
+// e commesse/macchine che lo richiedono con lo stato della commessa.
 function scaffaleRenderMaterialePopup(mat, celleConMat, commesseCheLaUsano) {
     let h = '';
 
@@ -961,6 +984,7 @@ function scaffaleRenderMaterialePopup(mat, celleConMat, commesseCheLaUsano) {
     document.getElementById('spBody').innerHTML = h;
 }
 
+// Chiude il popup di dettaglio commessa/materiale e rimuove le evidenziazioni dalle celle.
 function scaffaleClosePopup() {
     document.getElementById('scaffalePopupOverlay').classList.remove('open');
     scaffaleClearHighlights();
@@ -968,6 +992,8 @@ function scaffaleClosePopup() {
 
 // ── Inizializzazione ───────────────────────────────────────────────
 
+// Punto di ingresso della pagina scaffalatura: carica commesse e materiali dal backend,
+// costruisce l'overlay sulle foto, inizializza la ricerca e collega tutti gli eventi dei modal.
 async function scaffaleInit() {
     if (!document.getElementById('shelfOverlay')) return;
 

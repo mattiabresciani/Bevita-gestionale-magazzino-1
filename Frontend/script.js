@@ -6,6 +6,7 @@ let sezioneCorrente = 'commesse';
 
 // ── UTILITY ───────────────────────────────────────────────────────────────────
 
+// Wrapper HTTP autenticato: aggiunge il token JWT all'header e reindirizza a login.html se il server risponde 401.
 async function apiFetch(path, method = 'GET', body = null) {
     const opts = {
         method,
@@ -24,6 +25,7 @@ async function apiFetch(path, method = 'GET', body = null) {
     return res;
 }
 
+// Restituisce la classe CSS del badge in base allo stato di avanzamento della macchina-in-commessa.
 function statoClass(stato) {
     if (stato === 'COMPLETATA') return 'badge-completata';
     if (stato === 'IN_CORSO')   return 'badge-corso';
@@ -55,6 +57,7 @@ document.querySelectorAll('.pill-btn').forEach(btn => {
 
 // ── CARICA SEZIONE PRINCIPALE ─────────────────────────────────────────────────
 
+// Recupera i dati della sezione attiva dall'endpoint API corrispondente e li renderizza nel container principale.
 async function caricaSezione(sezione) {
     const container = document.getElementById('cards-container');
     container.innerHTML = '<p class="loading-msg">Caricamento...</p>';
@@ -85,6 +88,7 @@ async function caricaSezione(sezione) {
 
 // ── RENDER COMMESSE ───────────────────────────────────────────────────────────
 
+// Genera le card accordion delle commesse con barra di progresso, badge stato e pulsanti modifica/elimina/grafo.
 function renderCommesse(dati, container) {
     dati.forEach(c => {
         const statoClass = c.stato === 'CHIUSA' ? 'badge badge-chiusa' : 'badge badge-aperta';
@@ -135,6 +139,7 @@ function renderCommesse(dati, container) {
 
 // ── RENDER MACCHINE ───────────────────────────────────────────────────────────
 
+// Genera le card accordion delle macchine con intestazione di colonna e link cliccabile alla scheda macchina.
 function renderMacchine(dati, container) {
     const hdr = document.createElement('div');
     hdr.className = 'cards-col-header header-mac';
@@ -215,6 +220,7 @@ function renderLavorazioni(dati, container) {
 
 // ── RENDER SEMILAVORATI (catalogo: lavorazione + componenti) ──────────────────
 
+// Genera le card accordion dei semilavorati con codice, descrizione e processo associato.
 function renderSemilavorati(dati, container) {
     dati.forEach(s => {
         const div = document.createElement('div');
@@ -251,6 +257,8 @@ function renderSemilavorati(dati, container) {
     });
 }
 
+// Carica la ricetta di un semilavorato (lavorazione + componenti) e costruisce il form
+// per cambiare processo e aggiungere/rimuovere componenti (materie prime o altri semilavorati).
 async function caricaRicettaSemilavorato(idSem) {
     const tree = document.getElementById('tree-semilav-' + idSem);
     if (!tree) return;
@@ -343,6 +351,7 @@ async function caricaRicettaSemilavorato(idSem) {
 
 // ── RENDER MATERIE PRIME ──────────────────────────────────────────────────────
 
+// Restituisce la classe CSS del badge quantità: rosso se zero, arancio se sotto 10, neutro altrimenti.
 function qtyClass(qty) {
     const q = Number(qty) || 0;
     if (q === 0)  return 'qty-danger';
@@ -350,6 +359,7 @@ function qtyClass(qty) {
     return '';
 }
 
+// Genera le righe piatte delle materie prime con codice, descrizione e quantità colorata in base alla soglia.
 function renderMateriale(dati, container) {
     const hdr = document.createElement('div');
     hdr.className = 'cards-col-header header-mat';
@@ -384,6 +394,7 @@ function renderMateriale(dati, container) {
 
 // ── ACCORDION CONTENT ─────────────────────────────────────────────────────────
 
+// Carica le macchine associate a una commessa e mostra il form inline per aggiungerne di nuove dal catalogo.
 async function caricaMacchineCommessa(idCommessa) {
     const tree = document.getElementById('tree-commessa-' + idCommessa);
     if (!tree) return;
@@ -468,6 +479,7 @@ async function caricaMacchineCommessa(idCommessa) {
     aggiornaAltezzaPanel(tree);
 }
 
+// Carica e mostra la sequenza di lavorazioni di una macchina nell'accordion (sola lettura, senza form).
 async function caricaLavorazioniMacchina(idMacchina) {
     const tree = document.getElementById('tree-macchina-' + idMacchina);
     if (!tree) return;
@@ -534,6 +546,8 @@ const campiPerSezione = {
 let modalMode = 'add';
 let modalId   = null;
 
+// Apre il modal generico di aggiunta/modifica: costruisce dinamicamente i campi in base alla sezione.
+// Se datiEsistenti non è null, precompila i campi per la modalità "modifica".
 function apriModale(sezione, datiEsistenti = null) {
     const campi = campiPerSezione[sezione];
     const body  = document.getElementById('modalBody');
@@ -557,6 +571,7 @@ function apriModale(sezione, datiEsistenti = null) {
     document.getElementById('modalOverlay').classList.add('open');
 }
 
+// Chiude il modal generico e resetta l'id del record in modifica.
 function chiudiModale() {
     document.getElementById('modalOverlay').classList.remove('open');
     modalId = null;
@@ -611,6 +626,7 @@ document.getElementById('modalSave').addEventListener('click', async () => {
 
 // ── ELIMINA ───────────────────────────────────────────────────────────────────
 
+// Collega i pulsanti "Modifica" ed "Elimina" su tutte le card appena renderizzate nel DOM.
 function attaccaEventiCard() {
     document.querySelectorAll('.btn-modifica').forEach(btn => {
         btn.addEventListener('click', function(e) {
@@ -634,6 +650,7 @@ function attaccaEventiCard() {
     });
 }
 
+// Chiede conferma all'utente ed esegue il DELETE dell'elemento tramite API; ricarica la sezione se ok.
 async function eliminaElemento(sezione, label, id) {
     if (!confirm('Eliminare "' + label + '"?')) return;
     if (!id) { alert('ID non disponibile.'); return; }
@@ -649,6 +666,8 @@ let _blobUrls     = [];
 let _visNetwork   = null;
 let _currentMacchina = null;
 
+// Apre l'overlay "Scheda Macchina", resetta le aree di immagine/PDF/grafo
+// e avvia in parallelo il caricamento dei file e del grafo di lavorazioni.
 function apriSchedaMacchina(m) {
     _currentMacchina = { id: m.id, codice: m.codice };
 
@@ -669,6 +688,8 @@ function apriSchedaMacchina(m) {
     caricaGrafoLavorazioni(m.id, m.codice);
 }
 
+// Carica l'immagine principale e le schede tecniche PDF di una macchina;
+// revoca i blob URL precedenti per evitare memory leak.
 async function caricaFilesMacchina(idMacchina, codice) {
     _blobUrls.forEach(u => URL.revokeObjectURL(u));
     _blobUrls = [];
@@ -712,6 +733,7 @@ async function caricaFilesMacchina(idMacchina, codice) {
     listEl.querySelector('.st-item-btn').click();
 }
 
+// Scarica il PDF richiesto dal backend, crea un blob URL e lo incorpora in un tag <embed> nella preview.
 async function mostraPDF(filename) {
     const preview = document.getElementById('machineStPreview');
     preview.innerHTML = '<p class="machine-no-file">Caricamento PDF...</p>';
@@ -725,6 +747,8 @@ async function mostraPDF(filename) {
 
 // ── GRAFO LAVORAZIONI (vis.js) ────────────────────────────────────────────────
 
+// Costruisce il grafo vis.js della struttura di lavorazioni di una macchina (catalogo editabile):
+// usa un layout manuale ad albero orizzontale e abilita il menu contestuale su click nodo.
 async function caricaGrafoLavorazioni(idMacchina, codice) {
     const container = document.getElementById('machineBomGraph');
 
@@ -840,15 +864,18 @@ async function caricaGrafoLavorazioni(idMacchina, codice) {
 
 let _bomNodeMeta = {};
 
+// Ricarica il grafo per la macchina attualmente aperta (da chiamare dopo modifiche alla struttura).
 function ricaricaGrafoCorrente() {
     if (_currentMacchina) caricaGrafoLavorazioni(_currentMacchina.id, _currentMacchina.codice);
 }
 
+// Rimuove dal DOM il pannello contestuale di modifica nodo grafo, se presente.
 function chiudiBomEditMenu() {
     const ex = document.getElementById('bomEditPanel');
     if (ex) ex.remove();
 }
 
+// Mostra il menu contestuale vicino al click per aggiungere processo/materiale o eliminare il nodo selezionato.
 function mostraBomEditMenu(meta, domPos) {
     const graph = document.getElementById('machineBomGraph');
     const panel = document.createElement('div');
@@ -882,6 +909,7 @@ function mostraBomEditMenu(meta, domPos) {
     });
 }
 
+// Smista l'azione scelta nel menu contestuale del grafo: apre il modal di aggiunta o esegue l'eliminazione.
 function gestisciAzioneBom(act, meta) {
     chiudiBomEditMenu();
     const idMac = _currentMacchina?.id;
@@ -1004,12 +1032,14 @@ async function apriModaleElemento(idMac, opts = {}) {
     if (first) first.focus();
 }
 
+// Chiede conferma ed elimina un processo (con i suoi sotto-processi e materiali) dalla macchina.
 async function eliminaProcessoBom(meta) {
     if (!confirm('Eliminare il processo "' + (meta.descrizione ?? '') + '" e i suoi materiali?')) return;
     const r = await apiFetch('/lavorazioni/' + meta.dbId, 'DELETE');
     if (r && r.ok) ricaricaGrafoCorrente();
 }
 
+// Chiede conferma e rimuove un materiale richiesto dal processo nel grafo.
 async function eliminaMaterialeBom(meta) {
     if (!confirm('Rimuovere questo materiale dal processo?')) return;
     const r = await apiFetch('/rich_mat/' + meta.dbId, 'DELETE');
@@ -1021,6 +1051,7 @@ document.getElementById('bomAddRootBtn').addEventListener('click', function() {
     apriModaleElemento(_currentMacchina.id, { tipo: 'processo' });
 });
 
+// Chiude l'overlay scheda macchina, esce dal fullscreen se attivo e rilascia grafo e blob URL.
 function chiudiSchedaMacchina() {
     if (document.fullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
     document.getElementById('machineOverlay').classList.remove('open');
@@ -1043,6 +1074,7 @@ document.getElementById('bomFullscreenBtn').addEventListener('click', function()
 });
 document.addEventListener('fullscreenchange', _onBomFullscreenChange);
 document.addEventListener('webkitfullscreenchange', _onBomFullscreenChange);
+// Sincronizza l'icona del pulsante fullscreen con lo stato effettivo e ridisegna il grafo per adattarsi.
 function _onBomFullscreenChange() {
     const btn  = document.getElementById('bomFullscreenBtn');
     const icon = btn ? btn.querySelector('i') : null;
@@ -1085,6 +1117,7 @@ function calcolaProgresso(albero) {
     return tot > 0 ? Math.round(100 * forn / tot) : 0;
 }
 
+// Apre l'overlay operativo della commessa, resetta la barra di progresso e avvia il caricamento dell'albero.
 function apriVistaCommessa(c) {
     _commessaCorrente = c.id;
     _machineCollassate = new Set();
@@ -1099,6 +1132,7 @@ function apriVistaCommessa(c) {
     caricaAlberoCommessa(c.id);
 }
 
+// Chiude l'overlay operativo della commessa, distrugge il grafo vis.js e resetta lo stato corrente.
 function chiudiVistaCommessa() {
     document.getElementById('commessaOverlay').classList.remove('open');
     chiudiComMenu();
@@ -1106,6 +1140,9 @@ function chiudiVistaCommessa() {
     _commessaCorrente = null;
 }
 
+// Costruisce il grafo operativo drag&drop della commessa: aggiorna la barra di progresso,
+// posiziona nodi (commessa → macchine → processi → materiali) e abilita il trascinamento
+// per fornire materiali e "riporre" macchine completate.
 async function caricaAlberoCommessa(idCommessa) {
     const body = document.getElementById('commessaOpBody');
     if (typeof vis === 'undefined') {
@@ -1353,11 +1390,13 @@ async function caricaAlberoCommessa(idCommessa) {
     setTimeout(() => { if (_visCommessa) { _visCommessa.redraw(); _visCommessa.fit(); } }, 250);
 }
 
+// Rimuove dal DOM il menu contestuale "Restituisci" dell'overlay commessa, se presente.
 function chiudiComMenu() {
     const ex = document.getElementById('comEditPanel');
     if (ex) ex.remove();
 }
 
+// Mostra il menu contestuale con le voci "Restituisci 1" per i materiali già completati e forniti.
 function mostraComMenu(items, domPos) {
     const graph = document.getElementById('commessaBomGraph');
     if (!graph) return;
@@ -1379,6 +1418,7 @@ function mostraComMenu(items, domPos) {
     }));
 }
 
+// Chiama l'API per fornire 1 unità di materiale al processo (scala il magazzino di 1 e aggiorna il grafo).
 async function fornisciMateriale(cmId, rmId) {
     const res = await apiFetch('/commessa-macchine/' + cmId + '/rich_mat/' + rmId + '/fornisci', 'POST', {});
     if (res && res.ok) {
@@ -1389,6 +1429,7 @@ async function fornisciMateriale(cmId, rmId) {
     }
 }
 
+// Chiama l'API per restituire 1 unità di materiale (riporta il pezzo in magazzino e aggiorna il grafo).
 async function restituisciMateriale(cmId, rmId) {
     const res = await apiFetch('/commessa-macchine/' + cmId + '/rich_mat/' + rmId + '/restituisci', 'POST', {});
     if (res && res.ok) {
