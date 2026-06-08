@@ -84,7 +84,7 @@ class CommessaMacchina(db.Model):
     id_commessa = db.Column(db.Integer, db.ForeignKey('commesse.id'), nullable=False)
     id_macchina = db.Column(db.Integer, db.ForeignKey('macchine.id'), nullable=False)
     quantita    = db.Column(db.Integer, default=1)
-    stato       = db.Column(db.Enum('IN_ATTESA', 'IN_CORSO', 'COMPLETATA'), default='IN_ATTESA')
+    stato       = db.Column(db.Enum('DA_PRODURRE', 'IN_MAGAZZINO'), default='DA_PRODURRE')
 
 class ProcessoTipo(db.Model):
     """Catalogo CONDIVISO dei tipi di processo (es. 'saldatura'), gestito dalla scheda Lavorazioni."""
@@ -631,7 +631,7 @@ def aggiungi_macchina_commessa(id):
     res = q_exec(
         "INSERT INTO commessa_macchine (id_commessa, id_macchina, quantita, stato) "
         "VALUES (:idc, :idm, :q, :stato)",
-        idc=id, idm=data["id_macchina"], q=data.get("quantita", 1), stato=data.get("stato", "IN_ATTESA"))
+        idc=id, idm=data["id_macchina"], q=data.get("quantita", 1), stato=data.get("stato", "DA_PRODURRE"))
     return jsonify({"messaggio": "Macchina aggiunta alla commessa", "id": res.lastrowid}), 201
 
 @app.route("/commesse/<int:id>/macchine/<int:link_id>", methods=["DELETE"])

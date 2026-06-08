@@ -25,9 +25,16 @@ async function apiFetch(path, method = 'GET', body = null) {
 }
 
 function statoClass(stato) {
-    if (stato === 'COMPLETATA') return 'badge-completata';
+    if (stato === 'COMPLETATA' || stato === 'IN_MAGAZZINO') return 'badge-completata';
     if (stato === 'IN_CORSO')   return 'badge-corso';
-    return 'badge-attesa';
+    return 'badge-attesa';   // IN_ATTESA / DA_PRODURRE
+}
+
+// Etichetta leggibile dello stato di una macchina in commessa
+function labelStatoMacchina(stato) {
+    if (stato === 'IN_MAGAZZINO') return 'In magazzino';
+    if (stato === 'DA_PRODURRE')  return 'Da produrre';
+    return stato ?? '-';
 }
 
 // Colore distinto e stabile per ogni lavorazione (stesso nome processo = stesso colore)
@@ -110,10 +117,15 @@ function creaAutocomplete(opzioni, placeholder) {
 // ── RICERCA ───────────────────────────────────────────────────────────────────
 
 document.getElementById('searchInput').addEventListener('input', function () {
-    const q = this.value.toLowerCase();
-    document.querySelectorAll('.item-code').forEach(el => {
-        const card = el.closest('.commessa-card-accordion, .commessa-card');
-        if (card) card.style.display = el.textContent.toLowerCase().includes(q) ? '' : 'none';
+    const q = this.value.toLowerCase().trim();
+    document.querySelectorAll('.commessa-card-accordion, .commessa-card').forEach(card => {
+        const codeEl = card.querySelector('.item-code');
+        let testo = codeEl ? codeEl.textContent : '';
+        try {
+            const rec = JSON.parse(card.dataset.record || '{}');
+            testo += ' ' + (rec.codice ?? '') + ' ' + (rec.descrizione ?? '');
+        } catch (e) {}
+        card.style.display = testo.toLowerCase().includes(q) ? '' : 'none';
     });
 });
 
@@ -598,7 +610,7 @@ async function caricaMacchineCommessa(idCommessa) {
                 '<span class="tree-dot">&#9632;</span>' +
                 '<button class="material-code machine-link-btn">' + (m.codice ?? '-') + '</button>' +
                 '<span class="material-quantity">' + (m.descrizione ?? '') + '</span>' +
-                '<span class="material-quantity badge ' + statoClass(m.stato) + '">' + (m.stato ?? '-') + '</span>' +
+                '<span class="material-quantity badge ' + statoClass(m.stato) + '">' + labelStatoMacchina(m.stato) + '</span>' +
                 '<span class="material-quantity">Qt. ' + (m.quantita ?? '-') + '</span>' +
                 '<button class="action-btn delete-btn btn-rimuovi-mac" data-link-id="' + m.link_id + '" title="Rimuovi dalla commessa"><i class="fa-solid fa-trash"></i></button>';
             item.querySelector('.machine-link-btn').addEventListener('click', function(e) {
@@ -630,9 +642,8 @@ async function caricaMacchineCommessa(idCommessa) {
         '</select>' +
         '<input type="number" placeholder="Qtà" id="mc-qty-' + idCommessa + '" class="tree-input tree-input-sm" value="1" min="1" step="1">' +
         '<select id="mc-stato-' + idCommessa + '" class="tree-input">' +
-            '<option value="IN_ATTESA">IN_ATTESA</option>' +
-            '<option value="IN_CORSO">IN_CORSO</option>' +
-            '<option value="COMPLETATA">COMPLETATA</option>' +
+            '<option value="DA_PRODURRE">Da produrre</option>' +
+            '<option value="IN_MAGAZZINO">In magazzino</option>' +
         '</select>' +
         '<button class="bom-confirm-btn" id="mc-add-' + idCommessa + '" title="Aggiungi macchina"><i class="fa-solid fa-plus"></i></button>';
     tree.appendChild(addRow);
