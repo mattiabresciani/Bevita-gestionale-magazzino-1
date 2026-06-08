@@ -6,7 +6,7 @@ from functools import wraps
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 from dotenv import load_dotenv
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
@@ -24,6 +24,8 @@ jwt = JWTManager(app)
 _BASE = os.path.dirname(os.path.abspath(__file__))
 MACHINE_IMG_DIR = os.path.join(_BASE, '..', 'Frontend', 'machineImg')
 MACHINE_ST_DIR  = os.path.join(_BASE, '..', 'Frontend', 'machineST')
+LOG_DIR         = os.path.join(_BASE, 'log')
+LOG_GIORNI      = 15   # ritenzione: i log più vecchi di 15 giorni vengono cancellati
 
 
 # ── ACCESSO AL DB CON SQL ESPLICITO ───────────────────────────────────────────
@@ -165,6 +167,90 @@ def admin_required(f):
     return decorated
 
 
+# ── LOG ATTIVITÀ ──────────────────────────────────────────────────────────────
+# Registra in backend/log/AAAA-MM-GG.log chi (utente), quando, in che sezione e
+# cosa ha fatto. I file più vecchi di LOG_GIORNI vengono eliminati automaticamente.
+
+_ultima_pulizia_log = None
+
+def pulisci_log_vecchi():
+    """Elimina i file di log con data più vecchia di LOG_GIORNI giorni."""
+    if not os.path.isdir(LOG_DIR):
+        return
+    limite = datetime.now().date() - timedelta(days=LOG_GIORNI)
+    for nome in os.listdir(LOG_DIR):
+        if not nome.endswith('.log'):
+            continue
+        try:
+            data_file = datetime.strptime(nome[:-4], '%Y-%m-%d').date()
+        except ValueError:
+            continue
+        if data_file < limite:
+            try:
+                os.remove(os.path.join(LOG_DIR, nome))
+            except OSError:
+                pass
+
+def scrivi_log(utente, ruolo, sezione, azione, esito):
+    """Aggiunge una riga al log del giorno; lancia la pulizia al massimo una volta al giorno."""
+    global _ultima_pulizia_log
+    os.makedirs(LOG_DIR, exist_ok=True)
+    oggi = datetime.now().strftime('%Y-%m-%d')
+    if _ultima_pulizia_log != oggi:
+        pulisci_log_vecchi()
+        _ultima_pulizia_log = oggi
+    riga = "%s | utente=%s (%s) | sezione=%s | azione=%s | esito=%s\n" % (
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S'), utente, ruolo, sezione, azione, esito)
+    try:
+        with open(os.path.join(LOG_DIR, oggi + '.log'), 'a', encoding='utf-8') as f:
+            f.write(riga)
+    except OSError:
+        pass
+
+def _sezione_da_path(path):
+    """Mappa il percorso della richiesta a una sezione leggibile."""
+    if path.startswith('/login'):              return 'Login'
+    if path.startswith('/commessa-macchine'):  return 'Produzione (commessa)'
+    if path.startswith('/commesse'):           return 'Commesse'
+    if path.startswith('/macchine'):           return 'Macchine'
+    if path.startswith('/processi') or path.startswith('/lavorazioni'):
+        return 'Lavorazioni'
+    if path.startswith('/semilavorat'):        return 'Semilavorati'
+    if path.startswith('/rich_mat'):           return 'Materiali richiesti'
+    if path.startswith('/materiale'):          return 'Materie Prime'
+    if path.startswith('/clienti'):            return 'Clienti'
+    if path.startswith('/utenti'):             return 'Utenti'
+    return 'Altro'
+
+def _utente_corrente():
+    """Recupera utente e ruolo dal token JWT, se presente."""
+    try:
+        verify_jwt_in_request(optional=True)
+        ident = get_jwt_identity()
+        if ident:
+            return ident, get_jwt().get("ruolo", "-")
+    except Exception:
+        pass
+    return None, None
+
+@app.after_request
+def registra_azione(response):
+    """Logga ogni azione di scrittura (POST/PUT/DELETE) e i tentativi di login."""
+    try:
+        if request.method in ('POST', 'PUT', 'DELETE'):
+            if request.path == '/login':
+                body = request.get_json(silent=True) or {}
+                utente, ruolo = body.get('username') or 'anonimo', '-'
+            else:
+                utente, ruolo = _utente_corrente()
+                utente, ruolo = (utente or 'anonimo'), (ruolo or '-')
+            scrivi_log(utente, ruolo, _sezione_da_path(request.path),
+                       request.method + ' ' + request.path, response.status_code)
+    except Exception:
+        pass
+    return response
+
+
 # ── HELPER ALBERO ─────────────────────────────────────────────────────────────
 
 def desc_processo(lav):
@@ -214,6 +300,7 @@ def build_albero_lavorazione(id_lav, visitati):
         "id": lav["id"],
         "descrizione": desc_processo(lav),
         "tipo": "lavorazione",
+        "semilavorato": bool(lav["id_semilavorato"]),
         "rich_mat": materiali,
         "figli": figli
     }
@@ -234,27 +321,40 @@ def serializza_richmat_diretti_catalogo(id_macchina):
 
 
 def stato_lavorazione_cm(cm_id, cm_quantita, id_lav):
-    """Stato DERIVATO di una lavorazione per una macchina-in-commessa, dalle forniture.
-    Target di ogni materiale = quantita richiesta × n° macchine in commessa."""
-    richs = q_all(
-        "SELECT r.quantita, COALESCE(f.quantita_fornita, 0) AS fornita "
-        "FROM rich_mat r "
-        "LEFT JOIN fornitura_materiali f ON f.id_rich_mat = r.id AND f.id_commessa_macchina = :cm "
-        "WHERE r.id_lavorazione = :lav", cm=cm_id, lav=id_lav)
-    if not richs:
-        return "COMPLETATA"  # nessun materiale da conferire: non blocca la sequenza
+    """Stato DERIVATO di una lavorazione per una macchina-in-commessa.
+    Considera sia i MATERIALI diretti sia i SEMILAVORATI componenti (figli con id_semilavorato):
+    è COMPLETATA solo se tutti i materiali sono forniti E tutti i semilavorati componenti completati.
+    Target di ogni materiale = quantita richiesta × n° macchine in commessa. Ricorsivo per annidamenti."""
     completi = 0
-    parziali = 0
-    for r in richs:
+    iniziati = 0
+    totali = 0
+
+    for r in q_all(
+            "SELECT r.quantita, COALESCE(f.quantita_fornita, 0) AS fornita "
+            "FROM rich_mat r "
+            "LEFT JOIN fornitura_materiali f ON f.id_rich_mat = r.id AND f.id_commessa_macchina = :cm "
+            "WHERE r.id_lavorazione = :lav", cm=cm_id, lav=id_lav):
+        totali += 1
         target = r["quantita"] * cm_quantita
-        forn = r["fornita"]
-        if forn >= target:
+        if r["fornita"] >= target:
             completi += 1
-        elif forn > 0:
-            parziali += 1
-    if completi == len(richs):
+        elif r["fornita"] > 0:
+            iniziati += 1
+
+    # i figli che sono SEMILAVORATI (componenti) contano per il completamento del padre
+    for f in q_all("SELECT id FROM lavorazioni WHERE tav_padre = :id AND id_semilavorato IS NOT NULL", id=id_lav):
+        totali += 1
+        s = stato_lavorazione_cm(cm_id, cm_quantita, f["id"])
+        if s == "COMPLETATA":
+            completi += 1
+        elif s == "IN_CORSO":
+            iniziati += 1
+
+    if totali == 0:
+        return "COMPLETATA"   # niente da conferire né da produrre
+    if completi == totali:
         return "COMPLETATA"
-    if completi > 0 or parziali > 0:
+    if completi > 0 or iniziati > 0:
         return "IN_CORSO"
     return "IN_ATTESA"
 
@@ -303,7 +403,8 @@ def build_albero_commessa(cm, id_lav, padre_completo, visitati):
         "descrizione": desc_processo(lav),
         "tipo": "lavorazione",
         "stato": stato,
-        "bloccato": not padre_completo,   # sbloccato solo se il processo precedente è COMPLETATA
+        # un semilavorato si produce dai suoi materiali a prescindere dalla sequenza → mai bloccato
+        "bloccato": (not padre_completo) and not lav["id_semilavorato"],
         "rich_mat": materiali,
         "figli": figli
     }
@@ -552,7 +653,7 @@ def get_albero_commessa(id):
 
     macchine = []
     for cm in q_all(
-            "SELECT cm.id, cm.id_macchina, cm.quantita, m.codice, m.descrizione "
+            "SELECT cm.id, cm.id_macchina, cm.quantita, cm.collassata, m.codice, m.descrizione "
             "FROM commessa_macchine cm JOIN macchine m ON cm.id_macchina = m.id "
             "WHERE cm.id_commessa = :id", id=id):
         lavs = []
@@ -564,6 +665,7 @@ def get_albero_commessa(id):
             "commessa_macchina_id": cm["id"],
             "id": cm["id_macchina"], "codice": cm["codice"], "descrizione": cm["descrizione"],
             "quantita": cm["quantita"], "tipo": "macchina",
+            "collassata": bool(cm["collassata"]),
             "lavorazioni": lavs,
             "materiali_diretti": serializza_richmat_diretti_commessa(cm)
         })
@@ -573,6 +675,17 @@ def get_albero_commessa(id):
         "descrizione": commessa["descrizione"], "tipo": "commessa",
         "macchine": macchine
     }), 200
+
+@app.route("/commessa-macchine/<int:cm_id>/collassa", methods=["POST"])
+@jwt_required()
+def collassa_macchina(cm_id):
+    """Ripone (collassa) o riapre una macchina-in-commessa: stato persistente."""
+    if not q_one("SELECT id FROM commessa_macchine WHERE id = :id", id=cm_id):
+        return jsonify({"errore": "Commessa-macchina non trovata"}), 404
+    data = request.get_json() or {}
+    val = 1 if data.get("collassata") else 0
+    q_exec("UPDATE commessa_macchine SET collassata = :v WHERE id = :id", v=val, id=cm_id)
+    return jsonify({"messaggio": "Stato aggiornato", "collassata": bool(val)}), 200
 
 
 # ── FORNITURA MATERIALI (drag&drop operativo: scarico magazzino per commessa) ──
@@ -584,7 +697,7 @@ def _valida_fornitura(cm_id, rm_id):
     rm = q_one("SELECT id, id_lavorazione, id_macchina, id_materiale, quantita FROM rich_mat WHERE id = :id", id=rm_id)
     if not cm or not rm:
         return None, None, None, (jsonify({"errore": "Commessa-macchina o materiale non trovato"}), 404)
-    lav = q_one("SELECT id, id_macchina, tav_padre FROM lavorazioni WHERE id = :id", id=rm["id_lavorazione"]) if rm["id_lavorazione"] else None
+    lav = q_one("SELECT id, id_macchina, id_semilavorato, tav_padre FROM lavorazioni WHERE id = :id", id=rm["id_lavorazione"]) if rm["id_lavorazione"] else None
     macchina_del_mat = lav["id_macchina"] if lav else rm["id_macchina"]
     if macchina_del_mat != cm["id_macchina"]:
         return None, None, None, (jsonify({"errore": "Il materiale non appartiene a questa macchina"}), 400)
@@ -598,8 +711,11 @@ def fornisci_materiale(cm_id, rm_id):
     if err:
         return err
 
-    # Vincolo di sequenza: il processo precedente (tav_padre) dev'essere completato
-    if lav and lav["tav_padre"] and stato_lavorazione_cm(cm["id"], cm["quantita"], lav["tav_padre"]) != "COMPLETATA":
+    # Vincolo di sequenza: il processo precedente (tav_padre) dev'essere completato.
+    # NON si applica alla produzione di un semilavorato: si produce dai suoi materiali grezzi,
+    # a prescindere dalla sequenza di assemblaggio (altrimenti = deadlock).
+    if lav and lav["tav_padre"] and not lav["id_semilavorato"] \
+            and stato_lavorazione_cm(cm["id"], cm["quantita"], lav["tav_padre"]) != "COMPLETATA":
         return jsonify({"errore": "Il processo precedente non è ancora completato"}), 409
 
     target = rm["quantita"] * cm["quantita"]
@@ -1174,6 +1290,8 @@ def elimina_utente(id):
 
 with app.app_context():
     db.create_all()
+    os.makedirs(LOG_DIR, exist_ok=True)
+    pulisci_log_vecchi()
     print("[DB] Database pronto.")
 
 if __name__ == "__main__":

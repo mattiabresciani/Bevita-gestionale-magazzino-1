@@ -580,14 +580,20 @@ body.login-page * {
 }
 
 .accordion-arrow {
-    font-size: 28px;
+    font-size: 30px;
     font-weight: bold;
     color: var(--clr-dash-text);
-    transition: transform 0.2s ease;
-    display: inline-block;
-    width: 20px;
-    text-align: center;
+    transition: transform 0.2s ease, background-color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    cursor: pointer;
 }
+.accordion-header:hover .accordion-arrow { background-color: #ececec; }
 
 /* Quando la tendina è attiva la freccia ruota verso il basso */
 .commessa-card-accordion.active .accordion-arrow {
@@ -661,7 +667,7 @@ body.login-page * {
    ========================================================================== */
 .card-actions {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     margin-left: auto;
     padding-right: 20px;
 }
@@ -671,23 +677,27 @@ body.login-page * {
 }
 
 .action-btn {
-    background: none;
-    border: none;
+    background: #f3f4f7;
+    border: 1px solid #e2e5ea;
     cursor: pointer;
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
+    width: 44px;
+    height: 44px;
+    border-radius: 11px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
-    transition: background-color 0.15s, color 0.15s;
+    font-size: 18px;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
 }
+.action-btn:hover { transform: translateY(-1px); }
+.action-btn:active { transform: translateY(0); }
 
 .edit-btn { color: #555; }
-.edit-btn:hover { background-color: #e0e0e0; color: #1c1c1c; }
-.delete-btn { color: #aaa; }
-.delete-btn:hover { background-color: #ffe0ec; color: var(--primary-pink); }
+.edit-btn:hover { background-color: #e6e8ec; color: #1c1c1c; border-color: #cfd3da; }
+.delete-btn { color: #9a9a9a; }
+.delete-btn:hover { background-color: #ffe0ec; color: var(--primary-pink); border-color: #f5b8d0; }
+.btn-grafo-commessa { color: #5e6b85; }
+.btn-grafo-commessa:hover { background-color: #ede9ff; color: #5e35b1; border-color: #c5b8f5; }
 
 .badge-aperta {
     background-color: #e6f9ee;
@@ -2794,6 +2804,184 @@ div.vis-network div.vis-navigation div.vis-button:active {
     min-height: 0;
 }
 
+/* Modalità "Aggiorna giacenze" (tasto unico, modifica in blocco) */
+.mat-toolbar { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+.giac-bulk-btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 11px 18px; border-radius: 11px; cursor: pointer;
+    background: #e3f2fd; border: 1.5px solid #90caf9; color: #0d47a1;
+    font-size: 14px; font-weight: 700; font-family: inherit;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.giac-bulk-btn:hover { background: #d3e9fc; border-color: #64b5f6; transform: translateY(-1px); }
+.giac-bulk-btn i { font-size: 16px; }
+
+.modal-giacenze { width: 600px; max-width: 94vw; }
+.modal-giacenze .modal-header h3 { display: flex; align-items: center; gap: 9px; }
+.modal-giacenze .modal-header h3 i { color: var(--primary-pink); }
+.modal-giacenze .modal-body { max-height: 64vh; overflow-y: auto; }
+
+.giac-filtro {
+    width: 100%; box-sizing: border-box; margin-bottom: 14px;
+    border: 1.5px solid var(--clr-border); border-radius: 10px;
+    padding: 10px 14px; font-size: 14px; outline: none;
+}
+.giac-filtro:focus { border-color: var(--primary-pink); }
+
+.giac-list { display: flex; flex-direction: column; gap: 8px; }
+.giac-rowm {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; border: 1.5px solid var(--clr-border); border-radius: 11px; background: #fff;
+}
+.giac-rowm.giac-changed { border-color: #ffb300; background: #fff8e1; }
+.giac-rowm-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.giac-rowm-cod { font-size: 15px; font-weight: 700; color: #1c1c1c; }
+.giac-rowm-desc { font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.giac-rowm-step { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.giac-rowm-amt {
+    width: 52px; text-align: center; font-size: 14px; font-weight: 600; color: #555;
+    border: 1.5px dashed #b9c0cc; border-radius: 8px; padding: 7px 4px; outline: none; background: #fafbfc;
+    margin-right: 4px; -moz-appearance: textfield; appearance: textfield;
+}
+.giac-rowm-amt::-webkit-inner-spin-button,
+.giac-rowm-amt::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; }
+.giac-rowm-amt:focus { border-color: var(--primary-pink); border-style: solid; }
+.giac-rowm-val {
+    width: 70px; text-align: center; font-size: 17px; font-weight: 700; color: #1c1c1c;
+    border: 1.5px solid var(--clr-border); border-radius: 8px; padding: 7px 4px; outline: none;
+    -moz-appearance: textfield; appearance: textfield;
+}
+.giac-rowm-val::-webkit-inner-spin-button,
+.giac-rowm-val::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; }
+.giac-rowm-val:focus { border-color: var(--primary-pink); }
+.giac-mini {
+    width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
+    border: 1.5px solid var(--clr-border); background: #fff; cursor: pointer;
+    font-size: 18px; font-weight: 700; color: #c62828; line-height: 1;
+    transition: background 0.15s, border-color 0.15s;
+}
+.giac-mini:hover { background: #fdeaea; border-color: #ef9a9a; }
+.giac-mini.giac-up-btn { color: #2e7d32; }
+.giac-mini.giac-up-btn:hover { background: #eaf6eb; border-color: #a5d6a7; }
+.giac-count { margin-right: auto; font-size: 13px; font-weight: 700; color: #8d6e00; }
+
+/* Combobox con ricerca (autocomplete) */
+.ac-wrap { position: relative; flex: 1; min-width: 0; }
+.ac-input { width: 100%; }
+.ac-input.ac-scelto { border-color: var(--primary-pink); font-weight: 600; }
+.ac-list {
+    position: fixed;
+    z-index: 4000;
+    max-height: 240px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid var(--clr-border);
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.16);
+    padding: 5px;
+}
+.ac-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: #1c1c1c;
+    cursor: pointer;
+}
+.ac-item:hover { background: #f3f4f7; }
+.ac-tag {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    border-radius: 50px;
+    padding: 2px 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    border: 1px solid;
+}
+.ac-tag-materia-prima { color: #8d6e00; background: #fff3d6; border-color: #ffd980; }
+.ac-tag-semilavorato  { color: #5e35b1; background: #ede7fb; border-color: #c5b8f5; }
+.ac-empty { padding: 10px; font-size: 13px; color: #aaa; text-align: center; }
+
+/* Modale storico lavorazioni (macchina collassata) */
+.modal-storico { width: 580px; max-width: 92vw; }
+.modal-storico .modal-body { max-height: 60vh; overflow-y: auto; }
+.modal-storico .modal-header h3 { display: flex; align-items: center; gap: 9px; }
+.modal-storico .modal-header h3 i { color: var(--primary-pink); }
+
+/* Albero macchina (accordion tab Macchine): distinzione materiali/processi/semilavorati */
+.albero-macchina { padding: 6px 0; }
+.albero-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-left: 4px solid transparent;
+    border-radius: 6px;
+    margin-bottom: 4px;
+}
+.albero-row.tipo-processo  { border-left-color: #5e6b85; background: #f4f6f9; }
+.albero-row.tipo-semilav   { border-left-color: #5e35b1; background: #f3f0ff; }
+.albero-row.tipo-materiale { border-left-color: #ffb300; background: #fffaf0; }
+
+.albero-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 50px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.chip-processo  { background: #e4e8f0; color: #3b4660; border: 1px solid #c2cadb; }
+.chip-semilav   { background: #ede7fb; color: #4a2a92; border: 1px solid #c5b8f5; }
+.chip-materiale { background: #fff3d6; color: #8d6e00; border: 1px solid #ffd980; }
+
+.albero-nome { font-size: 15px; font-weight: 600; color: #1c1c1c; }
+.albero-desc { font-size: 13px; color: #888; }
+.albero-qty  { margin-left: auto; font-size: 14px; font-weight: 700; color: #555; padding-right: 6px; }
+
+.albero-sep {
+    margin: 12px 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #aaa;
+    border-top: 1px dashed var(--clr-border);
+    padding-top: 10px;
+}
+
+/* Riquadro contenitore delle commesse completate */
+.completate-box {
+    margin-top: 28px;
+    padding: 16px 16px 6px;
+    background: #f1f8f2;
+    border: 1.5px solid #b6dcb9;
+    border-radius: 16px;
+}
+.completate-box-header {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 12px;
+    padding: 0 4px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #2e7d32;
+}
+.completate-box-header i { color: #43a047; font-size: 15px; }
+
 /* Barra di progresso compatta sulla card commessa (tab Commesse) */
 .card-progress {
     display: flex;
@@ -2805,8 +2993,9 @@ div.vis-network div.vis-navigation div.vis-button:active {
 }
 .card-progress-track {
     flex: 1;
-    height: 8px;
-    background: #eceff3;
+    height: 9px;
+    background: #d4d9e2;
+    border: 1px solid #b9c0cc;
     border-radius: 50px;
     overflow: hidden;
 }
@@ -2839,7 +3028,8 @@ div.vis-network div.vis-navigation div.vis-button:active {
 .commessa-progress .cpb-track {
     flex: 1;
     height: 12px;
-    background: #eceff3;
+    background: #d4d9e2;
+    border: 1px solid #b9c0cc;
     border-radius: 50px;
     overflow: hidden;
 }
