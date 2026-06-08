@@ -187,7 +187,7 @@ function renderCommesse(dati, container) {
                 '<span class="accordion-arrow">&#x203A;</span>' +
                 '<span class="item-code commessa-code">' + (c.codice ?? '-') + '</span>' +
                 '<div class="accordion-badges">' +
-                    '<span class="badge">' + (c.descrizione ?? '-') + '</span>' +
+                    '<span class="card-desc">' + (c.descrizione ?? '-') + '</span>' +
                     '<span class="badge">' + (c.anno ?? '-') + '</span>' +
                     (c.data_consegna ? '<span class="badge"><i class="fa-regular fa-calendar"></i> ' + c.data_consegna + '</span>' : '') +
                     '<span class="' + statoClass + '">' + (c.stato ?? '-') + '</span>' +
@@ -261,7 +261,7 @@ function renderMacchine(dati, container) {
                 '<span class="accordion-arrow">&#x203A;</span>' +
                 '<button class="item-code commessa-code machine-link-btn" title="Apri scheda">' + (m.codice ?? '-') + '</button>' +
                 '<div class="accordion-badges">' +
-                    '<span class="badge">' + (m.descrizione ?? '-') + '</span>' +
+                    '<span class="card-desc">' + (m.descrizione ?? '-') + '</span>' +
                 '</div>' +
                 '<div class="card-actions">' +
                     '<button class="action-btn edit-btn btn-modifica" title="Modifica"><i class="fa-solid fa-pen"></i></button>' +
@@ -335,7 +335,7 @@ function renderSemilavorati(dati, container) {
                 '<span class="accordion-arrow">&#x203A;</span>' +
                 '<span class="item-code commessa-code">' + (s.codice || s.descrizione || '-') + '</span>' +
                 '<div class="accordion-badges">' +
-                    '<span class="badge">' + (s.descrizione ?? '-') + '</span>' +
+                    '<span class="card-desc">' + (s.descrizione ?? '-') + '</span>' +
                     '<span class="badge" style="' + procStyle + '"><i class="fa-solid fa-screwdriver-wrench"></i> ' + (s.processo ?? 'processo non impostato') + '</span>' +
                 '</div>' +
                 '<div class="card-actions">' +
@@ -488,7 +488,7 @@ function renderMateriale(dati, container) {
                 '<span class="item-code commessa-code">' + (m.codice ?? '-') + '</span>' +
             '</div>' +
             '<div class="card-right">' +
-                '<span class="badge">' + (m.descrizione ?? '-') + '</span>' +
+                '<span class="card-desc">' + (m.descrizione ?? '-') + '</span>' +
             '</div>' +
             '<span class="qty-display ' + qtyClass(m.quantita) + '">' + (m.quantita ?? 0) + '</span>' +
             '<div class="card-actions card-actions-right">' +
@@ -633,7 +633,7 @@ async function caricaMacchineCommessa(idCommessa) {
 
     const addRow = document.createElement('div');
     addRow.className = 'tree-add-row';
-    const opzioni = listaMac.map(m =>
+    const opzioni = listaMac.map(m => 
         '<option value="' + m.id + '">' + (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') + '</option>'
     ).join('');
     addRow.innerHTML =
@@ -1473,16 +1473,13 @@ async function caricaAlberoCommessa(idCommessa) {
             label = (item.bloccato ? '🔒 ' : '') + (item.descrizione ?? 'Processo').substring(0, 26) +
                     '\n[' + (item.bloccato ? 'BLOCCATO' : item.stato) + ']' + bulletList(item);
             _comNodeMeta[id] = { tipo: 'lavorazione', cm: childCm, completi: matCompleti(item).map(m => ({ rm: m.rich_mat_id, codice: m.codice })) };
-        } else { // rich_mat
+        } else { // rich_mat — sola lettura: mostra quanto è stato preparato in scaffalatura
             const completo = (item.quantita_fornita >= item.target);
-            const senza = (item.quantita_stock ?? 0) <= 0;
-            if (completo)   { bg = '#e8f5e9'; border = '#43a047'; fc = '#1b5e20'; }
-            else if (senza) { bg = '#fde8e8'; border = '#e53935'; fc = '#b71c1c'; }
-            else            { bg = '#ffffff'; border = '#c5b8f5'; fc = '#5e35b1'; }
+            if (completo) { bg = '#e8f5e9'; border = '#43a047'; fc = '#1b5e20'; }
+            else          { bg = '#ffffff'; border = '#c5b8f5'; fc = '#5e35b1'; }
             bw = 1;
-            label = (item.codice ?? '-') + '\n' + item.quantita_fornita + '/' + item.target + (completo ? ' ✓' : '') +
-                    '\nstock ' + (item.quantita_stock ?? 0);
-            _comNodeMeta[id] = { tipo: 'rich_mat', rm: item.rich_mat_id, cm: childCm, targetVisId: parentId, fornito: item.quantita_fornita, codice: item.codice };
+            label = (item.codice ?? '-') + '\n' + item.quantita_fornita + '/' + item.target + (completo ? ' ✓' : '');
+            _comNodeMeta[id] = { tipo: 'rich_mat', cm: childCm, fornito: item.quantita_fornita };
         }
 
         // macchina collassata = riquadro squadrato e compatto
@@ -1531,7 +1528,7 @@ async function caricaAlberoCommessa(idCommessa) {
         '<span class="dot dot-corso"></span>In corso' +
         '<span class="dot dot-done"></span>Completato' +
         '<span class="dot dot-lock"></span>Bloccato' +
-        '<span class="bom-legend-hint"><i class="fa-solid fa-arrow-pointer"></i> trascina un materiale sul suo processo</span>';
+        '<span class="bom-legend-hint"><i class="fa-solid fa-dolly"></i> i materiali si caricano dalla Scaffalatura</span>';
     container.appendChild(legend);
 
     // Pulsante ricentra
@@ -1542,17 +1539,21 @@ async function caricaAlberoCommessa(idCommessa) {
     fitBtn.addEventListener('click', () => { if (_visCommessa) _visCommessa.fit({ animation: true }); });
     container.appendChild(fitBtn);
 
-    // DRAG&DROP:
-    //  - nodo MATERIALE sul suo processo/macchina → rifornisce 1 unità
-    //  - nodo MACCHINA completata sulla commessa → la "ripone" (collassa in un riquadro a sinistra)
+    // DRAG&DROP (solo macchine):
+    //  - i MATERIALI sono di sola lettura (si caricano dalla Scaffalatura, non dal magazzino)
+    //  - una MACCHINA completata trascinata sulla commessa viene "riposta" (collassata)
     _visCommessa.on('dragEnd', params => {
         if (!params.nodes.length) return;
         const dragged = params.nodes[0];
         const meta = _comNodeMeta[dragged];
         if (!meta) return;
+
+        if (meta.tipo === 'rich_mat' || meta.tipo === 'lavorazione') {
+            caricaAlberoCommessa(_commessaCorrente);   // nodi non interattivi: ripristina posizione
+            return;
+        }
+
         const cpos = _visCommessa.DOMtoCanvas(params.pointer.DOM);
-        // rilascio "dentro" un nodo = il punto cade nel suo riquadro allargato di un margine (PAD),
-        // così basta lasciare la targhetta o i suoi dintorni, non per forza sul testo
         const PAD = 30;
         const dentro = (visId, pad = PAD) => {
             try {
@@ -1562,12 +1563,6 @@ async function caricaAlberoCommessa(idCommessa) {
             } catch (e) { return false; }
         };
 
-        if (meta.tipo === 'rich_mat') {
-            // si rifornisce SOLO se rilasciata dentro la targhetta del SUO processo (mai un altro)
-            if (dentro(meta.targetVisId)) fornisciMateriale(meta.cm, meta.rm);
-            else caricaAlberoCommessa(_commessaCorrente);   // snap-back
-            return;
-        }
         if (meta.tipo === 'macchina' && meta.completa && !meta.collapsed) {
             const comVis = Object.keys(_comNodeMeta).find(k => _comNodeMeta[k].tipo === 'commessa');
             if (comVis != null && dentro(Number(comVis))) collassaMacchina(meta.cm, true);   // persistente + ricarica
@@ -1575,29 +1570,18 @@ async function caricaAlberoCommessa(idCommessa) {
         }
     });
 
-    // CLICK:
-    //  - macchina collassata → riaprila
-    //  - materiale/targhetta con materiali completati → menu "Restituisci 1"
+    // CLICK: una macchina collassata mostra il menu (storico / riapri). I materiali non sono interattivi.
     _visCommessa.on('click', params => {
         chiudiComMenu();
         if (!params.nodes.length) return;
         const meta = _comNodeMeta[params.nodes[0]];
         if (!meta) return;
-        // macchina collassata → menu con "occhio" (storico) e riapertura
         if (meta.tipo === 'macchina' && meta.collapsed) {
             mostraComMenu([
                 { label: 'Storico lavorazioni', icon: 'fa-eye', action: () => apriStoricoMacchina(meta.macchinaId, meta.codice) },
                 { label: 'Riapri macchina', icon: 'fa-up-right-and-down-left-from-center', action: () => collassaMacchina(meta.cm, false) }
             ], params.pointer.DOM);
-            return;
         }
-        let items = [];
-        if (meta.tipo === 'rich_mat' && meta.fornito > 0) {
-            items = [{ label: 'Restituisci 1: ' + (meta.codice ?? ''), icon: 'fa-rotate-left', action: () => restituisciMateriale(meta.cm, meta.rm) }];
-        } else if ((meta.tipo === 'lavorazione' || meta.tipo === 'macchina') && meta.completi && meta.completi.length) {
-            items = meta.completi.map(c => ({ label: 'Restituisci 1: ' + (c.codice ?? ''), icon: 'fa-rotate-left', action: () => restituisciMateriale(meta.cm, c.rm) }));
-        }
-        if (items.length) mostraComMenu(items, params.pointer.DOM);
     });
 
     setTimeout(() => { if (_visCommessa) { _visCommessa.redraw(); _visCommessa.fit(); } }, 250);
@@ -1629,27 +1613,23 @@ function mostraComMenu(items, domPos) {
     }));
 }
 
-async function fornisciMateriale(cmId, rmId) {
-    const res = await apiFetch('/commessa-macchine/' + cmId + '/rich_mat/' + rmId + '/fornisci', 'POST', {});
-    if (res && res.ok) {
-        if (_commessaCorrente) caricaAlberoCommessa(_commessaCorrente);
-    } else if (res) {
-        const err = await res.json().catch(() => ({}));
-        alert('Impossibile fornire: ' + (err.errore || res.status));
-    }
-}
-
-async function restituisciMateriale(cmId, rmId) {
-    const res = await apiFetch('/commessa-macchine/' + cmId + '/rich_mat/' + rmId + '/restituisci', 'POST', {});
-    if (res && res.ok) {
-        if (_commessaCorrente) caricaAlberoCommessa(_commessaCorrente);
-    } else if (res) {
-        const err = await res.json().catch(() => ({}));
-        alert('Impossibile restituire: ' + (err.errore || res.status));
-    }
-}
-
 document.getElementById('commessaPanelClose').addEventListener('click', chiudiVistaCommessa);
 document.getElementById('commessaOverlay').addEventListener('click', function(e) {
     if (e.target === this) chiudiVistaCommessa();
 });
+
+// Vai dalla vista commessa alla scaffalatura (cella) della stessa commessa
+const _btnToScaffale = document.getElementById('commessaToScaffale');
+if (_btnToScaffale) _btnToScaffale.addEventListener('click', () => {
+    if (_commessaCorrente) window.location.href = 'scaffalatura.html?commessa=' + _commessaCorrente;
+});
+
+// Apertura automatica del grafo commessa quando si arriva da un link esterno (?commessaGrafo=<id>)
+(async function _autoApriGrafoCommessa() {
+    const idc = new URLSearchParams(window.location.search).get('commessaGrafo');
+    if (!idc) return;
+    const res = await apiFetch('/commesse');
+    if (!res || !res.ok) return;
+    const comm = (await res.json()).find(c => String(c.id) === String(idc));
+    if (comm) apriVistaCommessa(comm);
+})();

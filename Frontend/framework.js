@@ -560,6 +560,16 @@ function scaffaleCommessaCella(id) {
     return c && c.commessa ? c.commessa : null;
 }
 
+// Colore distinto e stabile per ogni commessa (tonalità derivata dall'id con l'angolo aureo).
+// La tinta della cella è semi-trasparente, così si vede la foto del pallet sotto.
+function scaffaleColoreCommessa(id) {
+    const hue = Math.round((Number(id) * 137.508) % 360);
+    return {
+        border: `hsl(${hue}, 72%, 46%)`,
+        band:   `hsla(${hue}, 68%, 30%, 0.58)`
+    };
+}
+
 function scaffaleBuildOverlay() {
     const overlay = document.getElementById('shelfOverlay');
     if (!overlay) return;
@@ -587,10 +597,14 @@ function scaffaleBuildOverlay() {
             coord.textContent = id;
             cell.appendChild(coord);
 
-            // Etichetta in basso: commessa assegnata alla cella
+            // Etichetta in basso: commessa assegnata alla cella, con colore distinto per commessa
             if (comm) {
+                const col = scaffaleColoreCommessa(comm.id);
+                cell.style.outline       = '2px solid ' + col.border;
+                cell.style.outlineOffset = '-2px';
                 const lbl = document.createElement('div');
                 lbl.className = 'shelf-cell-label';
+                lbl.style.background = col.band;   // tinta semi-trasparente: la foto resta visibile
                 const commLine = document.createElement('span');
                 commLine.className = 'scl-comm';
                 commLine.textContent = comm.codice || ('N°' + comm.id);
@@ -678,7 +692,11 @@ function scaffaleAggregaMateriali(macchina) {
 async function scaffaleOpenFactory(comm, cellId) {
     scaffaleFactoryComm = comm;
     scaffaleFactoryCell = cellId || null;
-    document.getElementById('spCodice').textContent = comm.codice || ('Commessa ' + comm.id);
+    const col = scaffaleColoreCommessa(comm.id);
+    const codiceEl = document.getElementById('spCodice');
+    codiceEl.textContent = comm.codice || ('Commessa ' + comm.id);
+    codiceEl.style.color = col.band;                                   // titolo nel colore della commessa
+    document.querySelector('#scaffalePopupOverlay .sp-header').style.boxShadow = 'inset 0 4px 0 ' + col.border;
     document.getElementById('spDesc').textContent   = comm.descrizione || '';
     document.getElementById('spBody').innerHTML = '<div class="sp-loading"><i class="fa-solid fa-spinner fa-spin"></i> Caricamento...</div>';
     document.getElementById('scaffalePopupOverlay').classList.add('open');
@@ -700,7 +718,10 @@ function scaffaleRenderFactory(albero) {
     let h = '';
     h += `<div class="fb-toolbar">
         <span class="fb-cell-tag"><i class="fa-solid fa-location-dot"></i> ${scaffaleFactoryCell ? 'Cella ' + scaffaleFactoryCell : 'Commessa'}</span>
-        ${scaffaleFactoryCell ? '<button class="fb-change-comm" id="fbChangeComm"><i class="fa-solid fa-pen"></i> Cambia commessa</button>' : ''}
+        <div class="fb-toolbar-actions">
+            <button class="goto-btn" id="fbGotoGrafo" title="Apri il grafo di completamento della commessa"><i class="fa-solid fa-diagram-project"></i> Completamento</button>
+            ${scaffaleFactoryCell ? '<button class="fb-change-comm" id="fbChangeComm"><i class="fa-solid fa-pen"></i> Cambia commessa</button>' : ''}
+        </div>
     </div>`;
 
     const macchine = albero.macchine || [];
@@ -752,6 +773,10 @@ function scaffaleRenderFactory(albero) {
         const cellId = scaffaleFactoryCell;
         scaffaleClosePopup();
         if (cellId) scaffaleOpenCellModal(cellId);
+    });
+    const goto = document.getElementById('fbGotoGrafo');
+    if (goto) goto.addEventListener('click', () => {
+        if (scaffaleFactoryComm) window.location.href = 'magazzino.html?commessaGrafo=' + scaffaleFactoryComm.id;
     });
     body.querySelectorAll('.fb-mat-row').forEach(row => {
         const cm = row.dataset.cm, mat = row.dataset.mat;
@@ -884,6 +909,19 @@ async function scaffaleInit() {
     document.getElementById('scaffalePopupOverlay').addEventListener('click', e => {
         if (e.target === e.currentTarget) scaffaleClosePopup();
     });
+
+    // Arrivo da un link esterno (?commessa=<id>): apri direttamente la fabbrica della commessa
+    const idc = new URLSearchParams(window.location.search).get('commessa');
+    if (idc) {
+        const comm = scaffaleCommesse.find(c => String(c.id) === String(idc));
+        if (comm) {
+            let cellId = null;
+            Object.entries(scaffaleLoadCelle()).forEach(([cid, cel]) => {
+                if (cel && cel.commessa && String(cel.commessa.id) === String(idc)) cellId = cid;
+            });
+            scaffaleOpenFactory(comm, cellId);
+        }
+    }
 }
 
 document.addEventListener('DOMContentLoaded', scaffaleInit);

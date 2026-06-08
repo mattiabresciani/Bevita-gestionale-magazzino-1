@@ -193,6 +193,12 @@
                 <span class="home-card-desc">Registra dipendenti e gestisci gli accessi</span>
             </a>
 
+            <a href="documentazione.html" class="home-card-btn" id="docCard" style="display:none;">
+                <i class="fa-solid fa-book"></i>
+                <span class="home-card-label">Documentazione Software</span>
+                <span class="home-card-desc">Intenzioni, logica e struttura del database del gestionale</span>
+            </a>
+
             <a href="magazzino.html" class="home-card-btn">
                 <i class="fa-solid fa-dumpster-fire"></i>
                 <span class="home-card-label">Futura aggiunta</span>
@@ -216,6 +222,7 @@
             if (data.ruolo === 'admin') {
                 document.getElementById('username').textContent = 'Admin';
                 document.getElementById('adminCard').style.display = '';
+                document.getElementById('docCard').style.display = '';
             } else {
                 document.getElementById('username').textContent = data.nome || data.username || '';
             }
