@@ -3252,3 +3252,151 @@ div.vis-network div.vis-navigation div.vis-button:active {
     transition: background-color 0.15s, color 0.15s;
 }
 .op-chip-undo:hover { background: #ffe0ec; color: var(--primary-pink); }
+
+/* ==========================================================================
+   SCAFFALATURA — PANNELLO "FABBRICA" (preparazione materiali commessa)
+   ========================================================================== */
+.ca-hint {
+    font-size: 12px;
+    color: #999;
+    margin-top: 12px;
+    line-height: 1.5;
+}
+.ca-hint i { color: var(--primary-pink); margin-right: 4px; }
+
+.fb-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.fb-cell-tag {
+    font-size: 13px;
+    font-weight: 700;
+    color: #555;
+}
+.fb-cell-tag i { color: var(--primary-pink); margin-right: 5px; }
+.fb-change-comm {
+    background: none;
+    border: 1px solid var(--clr-border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: #666;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.fb-change-comm:hover { background: #ffe0ec; color: var(--primary-pink); border-color: #f5b8d0; }
+
+/* Blocco macchina */
+.fb-macchina {
+    border: 1.5px solid var(--clr-border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    background: #fff;
+    transition: border-color 0.25s, box-shadow 0.25s;
+}
+.fb-macchina.fb-ready {
+    border-color: #43a047;
+    box-shadow: 0 0 0 3px rgba(67,160,71,0.14);
+    background: linear-gradient(180deg, #f3fbf4, #fff);
+}
+.fb-mac-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.fb-mac-codice { font-size: 16px; font-weight: 700; color: #1c1c1c; }
+.fb-mac-codice i { color: var(--primary-pink); margin-right: 5px; }
+.fb-mac-nome { font-size: 13px; color: #888; flex: 1; }
+.fb-ready-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #e8f5e9;
+    border: 1px solid #a5d6a7;
+    color: #2e7d32;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 50px;
+    animation: fbReadyPulse 1.6s ease-in-out infinite;
+}
+@keyframes fbReadyPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(67,160,71,0.0); }
+    50%      { box-shadow: 0 0 0 5px rgba(67,160,71,0.18); }
+}
+.fb-empty { font-size: 12px; color: #bbb; padding: 6px 2px; }
+
+/* Righe materiale (ricetta) */
+.fb-mat-list { display: flex; flex-direction: column; gap: 8px; }
+.fb-mat-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #fafafa;
+    border: 1px solid var(--clr-border);
+}
+.fb-mat-row.fb-mat-done { background: #eef9ef; border-color: #c4e6c6; }
+.fb-mat-info { width: 150px; flex-shrink: 0; display: flex; flex-direction: column; }
+.fb-mat-codice { font-size: 14px; font-weight: 700; color: #1c1c1c; }
+.fb-mat-nome   { font-size: 11px; color: #999; }
+
+.fb-mat-progress {
+    flex: 1;
+    height: 10px;
+    background: #e7e9ee;
+    border-radius: 50px;
+    overflow: hidden;
+    min-width: 60px;
+}
+.fb-mat-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 50px;
+    background: linear-gradient(90deg, #ffb300, #ff8f00);
+    transition: width 0.35s ease;
+}
+.fb-mat-fill.full { background: linear-gradient(90deg, #43a047, #2e7d32); }
+
+.fb-mat-count {
+    font-size: 13px;
+    font-weight: 700;
+    color: #555;
+    min-width: 48px;
+    text-align: center;
+}
+.fb-mat-stock { font-size: 11px; color: #999; min-width: 64px; text-align: right; }
+.fb-mat-stock.danger { color: #dc2626; font-weight: 700; }
+
+.fb-mat-actions { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.fb-btn {
+    width: 28px; height: 28px;
+    border: 1px solid var(--clr-border);
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    color: #555;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.fb-btn-plus:hover:not(:disabled)  { background: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
+.fb-btn-minus:hover:not(:disabled) { background: #ffe0ec; color: var(--primary-pink); border-color: #f5b8d0; }
+.fb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.fb-qty {
+    width: 50px; height: 28px;
+    border: 1px solid var(--clr-border);
+    border-radius: 8px;
+    text-align: center;
+    font-size: 13px;
+    color: #1c1c1c;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+.fb-qty::-webkit-inner-spin-button, .fb-qty::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; }

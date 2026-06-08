@@ -775,6 +775,113 @@ def restituisci_materiale(cm_id, rm_id):
     }), 200
 
 
+# ── PREPARAZIONE MATERIALI (scaffalatura: assegna per quantità, senza sequenza) ──
+
+def _richmat_materiale_macchina(id_macchina, id_materiale):
+    """Tutte le rich_mat di una macchina (sotto i processi o dirette) per un dato materiale."""
+    return q_all(
+        "SELECT r.id, r.quantita FROM rich_mat r JOIN lavorazioni l ON r.id_lavorazione = l.id "
+        "WHERE l.id_macchina = :idm AND r.id_materiale = :mat "
+        "UNION ALL "
+        "SELECT r.id, r.quantita FROM rich_mat r "
+        "WHERE r.id_macchina = :idm AND r.id_lavorazione IS NULL AND r.id_materiale = :mat",
+        idm=id_macchina, mat=id_materiale)
+
+@app.route("/commessa-macchine/<int:cm_id>/materiale/<int:mat_id>/fornisci", methods=["POST"])
+@jwt_required()
+def fornisci_materiale_quantita(cm_id, mat_id):
+    """Prepara dal magazzino una QUANTITÀ di un materiale per una macchina-in-commessa.
+    Distribuisce le unità sulle rich_mat di quel materiale e scala il magazzino.
+    Nessun vincolo di sequenza (è la preparazione del magazziniere)."""
+    cm = q_one("SELECT id, id_macchina, quantita FROM commessa_macchine WHERE id = :id", id=cm_id)
+    if not cm:
+        return jsonify({"errore": "Commessa-macchina non trovata"}), 404
+    data = request.get_json() or {}
+    try:
+        richiesta = int(data.get("quantita", 1))
+    except (ValueError, TypeError):
+        richiesta = 0
+    if richiesta < 1:
+        return jsonify({"errore": "Quantità non valida"}), 400
+
+    mat = q_one("SELECT id, Quantita FROM materialeMagazzino WHERE id = :id", id=mat_id)
+    if not mat:
+        return jsonify({"errore": "Materiale non trovato"}), 404
+    stock = int(mat["Quantita"] or 0)
+
+    richs = _richmat_materiale_macchina(cm["id_macchina"], mat_id)
+    if not richs:
+        return jsonify({"errore": "Questo materiale non è richiesto da questa macchina"}), 400
+
+    assegnato = 0
+    for r in richs:
+        if richiesta <= 0 or stock <= 0:
+            break
+        target = r["quantita"] * cm["quantita"]
+        f = q_one("SELECT id, quantita_fornita FROM fornitura_materiali "
+                  "WHERE id_commessa_macchina = :cm AND id_rich_mat = :rm", cm=cm["id"], rm=r["id"])
+        forn = f["quantita_fornita"] if f else 0
+        manca = target - forn
+        if manca <= 0:
+            continue
+        manca = int(manca) if manca == int(manca) else int(manca) + 1   # arrotonda per eccesso
+        dai = min(manca, richiesta, stock)
+        if dai <= 0:
+            continue
+        if f:
+            q_exec("UPDATE fornitura_materiali SET quantita_fornita = quantita_fornita + :n WHERE id = :id",
+                   commit=False, n=dai, id=f["id"])
+        else:
+            q_exec("INSERT INTO fornitura_materiali (id_commessa_macchina, id_rich_mat, quantita_fornita) "
+                   "VALUES (:cm, :rm, :n)", commit=False, cm=cm["id"], rm=r["id"], n=dai)
+        assegnato += dai
+        richiesta -= dai
+        stock     -= dai
+
+    if assegnato:
+        q_exec("UPDATE materialeMagazzino SET Quantita = Quantita - :n WHERE id = :id", commit=False, n=assegnato, id=mat_id)
+        db.session.commit()
+
+    return jsonify({"messaggio": "Materiale assegnato", "assegnato": assegnato, "quantita_stock": stock}), 200
+
+@app.route("/commessa-macchine/<int:cm_id>/materiale/<int:mat_id>/restituisci", methods=["POST"])
+@jwt_required()
+def restituisci_materiale_quantita(cm_id, mat_id):
+    """Annulla una QUANTITÀ di materiale assegnata: la rimette in magazzino."""
+    cm = q_one("SELECT id, id_macchina FROM commessa_macchine WHERE id = :id", id=cm_id)
+    if not cm:
+        return jsonify({"errore": "Commessa-macchina non trovata"}), 404
+    data = request.get_json() or {}
+    try:
+        richiesta = int(data.get("quantita", 1))
+    except (ValueError, TypeError):
+        richiesta = 0
+    if richiesta < 1:
+        return jsonify({"errore": "Quantità non valida"}), 400
+
+    richs = _richmat_materiale_macchina(cm["id_macchina"], mat_id)
+    restituito = 0
+    for r in richs:
+        if richiesta <= 0:
+            break
+        f = q_one("SELECT id, quantita_fornita FROM fornitura_materiali "
+                  "WHERE id_commessa_macchina = :cm AND id_rich_mat = :rm", cm=cm["id"], rm=r["id"])
+        if not f or f["quantita_fornita"] <= 0:
+            continue
+        togli = min(f["quantita_fornita"], richiesta)
+        q_exec("UPDATE fornitura_materiali SET quantita_fornita = quantita_fornita - :n WHERE id = :id",
+               commit=False, n=togli, id=f["id"])
+        restituito += togli
+        richiesta  -= togli
+
+    if restituito:
+        q_exec("UPDATE materialeMagazzino SET Quantita = COALESCE(Quantita, 0) + :n WHERE id = :id", commit=False, n=restituito, id=mat_id)
+        db.session.commit()
+
+    stock = q_scalar("SELECT Quantita FROM materialeMagazzino WHERE id = :id", id=mat_id)
+    return jsonify({"messaggio": "Materiale restituito", "restituito": restituito, "quantita_stock": stock}), 200
+
+
 # ── MACCHINE ──────────────────────────────────────────────────────────────────
 
 @app.route("/macchine", methods=["GET"])
