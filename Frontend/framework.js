@@ -1,5 +1,5 @@
 // Base API: stesso host della pagina (localhost o 127.0.0.1) per evitare mismatch di origine
-const API_BASE = 'http://' + location.hostname + ':5001';
+const API_BASE = window.BACKEND_URL;
 
 // ── Autenticazione / redirect (UNICO punto, condiviso da tutte le pagine) ──────
 // Comportamento coerente ovunque:

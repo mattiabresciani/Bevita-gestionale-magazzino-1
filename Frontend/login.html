@@ -38,6 +38,7 @@
         </div>
     </div>
 
+    <script src="config.js"></script>
     <script>
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
         e.preventDefault();
@@ -47,7 +48,7 @@
         const messaggioEl = document.getElementById("messaggio");
 
         // Stesso host della pagina (localhost o 127.0.0.1): evita il mismatch di origine
-        const API = 'http://' + location.hostname + ':5001';
+        const API = window.BACKEND_URL;
 
         try {
             const res = await fetch(API + '/login', {

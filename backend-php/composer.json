@@ -1,0 +1,23 @@
+{
+    "name": "bevita/gestionale-magazzino-php",
+    "description": "Backend PHP (Slim 4) del gestionale magazzino Bevita - port da Flask",
+    "type": "project",
+    "require": {
+        "php": ">=8.1",
+        "ext-pdo": "*",
+        "slim/slim": "^4.12",
+        "slim/psr7": "^1.6",
+        "firebase/php-jwt": "^6.10"
+    },
+    "autoload": {
+        "psr-4": {
+            "Bevita\\": "src/"
+        },
+        "files": [
+            "src/db.php",
+            "src/auth.php",
+            "src/log.php",
+            "src/albero.php"
+        ]
+    }
+}

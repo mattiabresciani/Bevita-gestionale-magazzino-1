@@ -139,8 +139,9 @@
         </div>
     </main>
 
+    <script src="config.js"></script>
     <script>
-        const API = 'http://' + location.hostname + ':5001';
+        const API = window.BACKEND_URL;
         const token = localStorage.getItem('token');
 
         // Auth guard — solo admin

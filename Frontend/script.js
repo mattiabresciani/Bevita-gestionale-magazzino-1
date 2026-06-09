@@ -1,5 +1,5 @@
 // Usa lo stesso host della pagina (localhost o 127.0.0.1) per evitare mismatch di origine
-const API = 'http://' + location.hostname + ':5001';
+const API = window.BACKEND_URL;
 const token = localStorage.getItem('token');
 if (!token) window.location.href = 'login.html';
 

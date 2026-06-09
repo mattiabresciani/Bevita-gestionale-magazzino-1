@@ -1,0 +1,10 @@
+2026-06-09 11:49:42 | utente=anonimo (-) | sezione=Login | azione=POST /login | esito=ERRORE(401)
+2026-06-09 11:50:01 | utente=admin (admin) | sezione=Clienti | azione=POST /clienti | esito=OK
+2026-06-09 11:50:18 | utente=admin (admin) | sezione=Clienti | azione=PUT /clienti/17 | esito=OK
+2026-06-09 11:50:18 | utente=admin (admin) | sezione=Clienti | azione=DELETE /clienti/17 | esito=OK
+2026-06-09 11:50:18 | utente=admin (admin) | sezione=Clienti | azione=DELETE /clienti/17 | esito=ERRORE(404)
+2026-06-09 12:12:14 | utente=admin (admin) | sezione=Produzione (commessa) | azione=POST /commessa-macchine/2/materiale/7/fornisci | esito=OK
+2026-06-09 12:12:14 | utente=admin (admin) | sezione=Produzione (commessa) | azione=POST /commessa-macchine/2/materiale/7/restituisci | esito=OK
+2026-06-09 12:12:15 | utente=admin (admin) | sezione=Produzione (commessa) | azione=POST /commessa-macchine/2/materiale/7/fornisci | esito=OK
+2026-06-09 12:12:15 | utente=admin (admin) | sezione=Produzione (commessa) | azione=POST /commessa-macchine/2/materiale/7/restituisci | esito=OK
+2026-06-09 12:12:33 | utente=admin (admin) | sezione=Produzione (commessa) | azione=POST /commessa-macchine/2/materiale/7/fornisci | esito=OK
