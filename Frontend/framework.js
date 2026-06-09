@@ -1,3 +1,166 @@
+// Base API: stesso host della pagina (localhost o 127.0.0.1) per evitare mismatch di origine
+const API_BASE = 'http://' + location.hostname + ':5001';
+
+// ── Autenticazione / redirect (UNICO punto, condiviso da tutte le pagine) ──────
+// Comportamento coerente ovunque:
+//   • manca il token            → login.html
+//   • risposta 401 (scaduto)    → rimuovi il token e vai a login.html
+//   • pagina solo-admin + ruolo non admin → index.html
+// (prima ogni pagina lo gestiva a modo suo: alcune non lo gestivano affatto.)
+function authToken() { return localStorage.getItem('token'); }
+
+function logoutUtente() {
+    localStorage.removeItem('token');   // solo il token: lo scaffale vive sul DB
+    window.location.href = 'login.html';
+}
+
+// Guard base: chiama in cima a ogni pagina protetta. Ritorna false se ha già reindirizzato.
+function richiediAutenticazione() {
+    if (!authToken()) { window.location.href = 'login.html'; return false; }
+    return true;
+}
+
+// Recupera le info utente con gestione coerente degli errori. Ritorna i dati o null.
+async function infoUtente() {
+    if (!authToken()) { window.location.href = 'login.html'; return null; }
+    try {
+        const r = await fetch(API_BASE + '/logininfo', { headers: { 'Authorization': 'Bearer ' + authToken() } });
+        if (r.status === 401) { logoutUtente(); return null; }
+        if (!r.ok) return null;
+        return await r.json();
+    } catch { return null; }   // server irraggiungibile: non buttare fuori l'utente
+}
+
+// Guard pagine SOLO-ADMIN: login se non autenticato/scaduto, index se non admin.
+async function richiediAdmin() {
+    const d = await infoUtente();
+    if (!d) return null;                  // infoUtente ha già gestito login/401
+    if (d.ruolo !== 'admin') { window.location.href = 'index.html'; return null; }
+    return d;
+}
+
+// ── Combobox con ricerca (stile scaffalatura) ──────────────────────────────────
+// Sostituisce i <select> pieni di voci: barra in cui digitare + elenco bianco
+// filtrato sotto. La ricerca filtra per CODICE o DESCRIZIONE.
+//   opzioni = [{ value, label, codice?, desc?, tag? }]
+//     - label   = testo mostrato nella barra quando l'opzione è scelta
+//     - codice  = codice articolo (se presente: mostrato in rosa nell'elenco e cercabile)
+//     - desc    = descrizione (mostrata sotto il codice nell'elenco)
+//   extra (opzionale) = { id, value, onChange, wide, placeholder }
+//     - id      = se presente crea un <input type="hidden" id=ID> col valore scelto,
+//                 così il codice esistente può leggere getElementById(ID).value e
+//                 ricevere l'evento 'change' alla selezione.
+//     - value   = valore iniziale già selezionato.
+// Metodi sull'elemento ritornato: .getValore() (opzione o null), .setValore(v), .reset().
+function creaAutocomplete(opzioni, placeholder, extra = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ac-wrap' + (extra.wide ? ' ac-wide' : '');
+
+    let hidden = null;
+    if (extra.id) {
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.id = extra.id;
+        wrap.appendChild(hidden);
+    }
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tree-input ac-input';
+    input.placeholder = placeholder || 'Cerca per codice o descrizione...';
+    input.autocomplete = 'off';
+    wrap.appendChild(input);
+
+    const list = document.createElement('div');
+    list.className = 'ac-list';
+    list.style.display = 'none';
+    document.body.appendChild(list);
+
+    // rimuove la lista (appesa al body) quando l'input viene tolto dal DOM
+    const obs = new MutationObserver(() => {
+        if (!document.body.contains(input)) { list.remove(); obs.disconnect(); }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+
+    let selezionato = null;
+    let aperto = false;
+
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    const testoRicerca = o => ((o.codice ? o.codice + ' ' : '') + (o.label || '') + ' ' + (o.desc || '')).toLowerCase();
+
+    function applica(o) {
+        selezionato = o || null;
+        input.value = o ? o.label : '';
+        input.classList.toggle('ac-scelto', !!o);
+        if (hidden) hidden.value = o ? o.value : '';
+    }
+
+    function posiziona() {
+        const r = input.getBoundingClientRect();
+        list.style.left  = r.left + 'px';
+        list.style.top   = (r.bottom + 4) + 'px';
+        list.style.width = r.width + 'px';
+    }
+
+    function render() {
+        // se l'utente non ha ancora digitato (input = opzione scelta) mostra tutto
+        const q = (selezionato && input.value === selezionato.label) ? '' : input.value.toLowerCase().trim();
+        const filt = (q ? opzioni.filter(o => testoRicerca(o).includes(q)) : opzioni).slice(0, 80);
+        list.innerHTML = filt.length
+            ? filt.map((o, i) =>
+                '<div class="ac-item" data-i="' + i + '">' +
+                    (o.codice
+                        ? '<span class="ac-cod">' + esc(o.codice) + '</span><span class="ac-desc">' + esc(o.desc || o.label) + '</span>'
+                        : '<span class="ac-lab">' + esc(o.label) + '</span>') +
+                    (o.tag ? '<span class="ac-tag ac-tag-' + esc(o.tag).replace(/\s+/g, '-') + '">' + esc(o.tag) + '</span>' : '') +
+                '</div>').join('')
+            : '<div class="ac-empty">Nessun risultato</div>';
+        list.querySelectorAll('.ac-item').forEach(el => {
+            el.addEventListener('mousedown', e => {   // mousedown: scatta prima del blur
+                e.preventDefault();
+                const o = filt[Number(el.dataset.i)];
+                applica(o);
+                chiudi();
+                if (hidden) hidden.dispatchEvent(new Event('change', { bubbles: true }));
+                if (extra.onChange) extra.onChange(o);
+            });
+        });
+        posiziona();
+        list.style.display = '';
+        aperto = true;
+    }
+
+    function chiudi() { list.style.display = 'none'; aperto = false; }
+
+    input.addEventListener('focus', () => { input.select(); render(); });
+    input.addEventListener('input', render);
+    input.addEventListener('blur', () => setTimeout(() => {
+        chiudi();
+        // ripristina il testo all'opzione effettivamente scelta (niente testo "sospeso")
+        input.value = selezionato ? selezionato.label : '';
+        input.classList.toggle('ac-scelto', !!selezionato);
+    }, 150));
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { chiudi(); input.blur(); }
+        else if (e.key === 'Enter') {
+            e.preventDefault();
+            const primo = list.querySelector('.ac-item');
+            if (aperto && primo) primo.dispatchEvent(new MouseEvent('mousedown'));
+        }
+    });
+    window.addEventListener('scroll', () => { if (aperto) posiziona(); }, true);
+
+    if (extra.value !== undefined && extra.value !== null && extra.value !== '') {
+        const o = opzioni.find(x => String(x.value) === String(extra.value));
+        if (o) applica(o);
+    }
+
+    wrap.getValore = () => selezionato;
+    wrap.setValore = v => { const o = opzioni.find(x => String(x.value) === String(v)); applica(o || null); };
+    wrap.reset = () => { applica(null); chiudi(); };
+    return wrap;
+}
+
 // Costruisce l'header della pagina: inserisce il burger menu, il logo, la sidebar
 // e i pill buttons. Gestisce apertura/chiusura sidebar e logout.
 function initHeaderComponent() {
@@ -27,6 +190,7 @@ function initHeaderComponent() {
                 <a href="magazzino.html" id="sidebar-magazzino"><i class="fa-solid fa-warehouse"></i> Inventario e Gestionale</a>
                 <a href="scaffalatura.html" id="sidebar-magazzino"><i class="fa-solid fa-dolly"></i> Scaffalatura</a>
                 <a href="user.html" id="sidebar-utenti"><i class="fa-solid fa-users-gear"></i> Gestione Utenti</a>
+                <a href="documentazione.html" id="sidebar-utenti"><i class="fa-solid fa-book-bible"></i> Documentazione</a>
                 <a href="#" id="sidebar-logout"><i class="fa-solid fa-right-from-bracket"></i> Disconnetti</a>
             </nav>
         </div>
@@ -62,13 +226,12 @@ function initHeaderComponent() {
         overlay.addEventListener('click', toggleMenu);
     }
 
-    // Regola il comportamento del logout: pulisce localStorage e reindirizza a login.html
+    // Logout: usa l'helper condiviso (rimuove solo il token e va al login).
     const logoutBtn = document.getElementById('sidebar-logout');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', function (e) {
             e.preventDefault();
-            localStorage.clear();
-            window.location.href = 'login.html';
+            logoutUtente();
         });
     }
 
@@ -513,7 +676,6 @@ const SCAFFALE_COL_POS = {
     8: { l: 85.7, w: 11.8 }
 };
 
-const SCAFFALE_KEY  = 'scaffalatura_celle';
 const SCAFFALE_ROWS = ['D', 'C', 'B', 'A'];
 const SCAFFALE_COLS = [1, 2, 3, 4, 5, 6, 7, 8];
 
@@ -523,30 +685,48 @@ let scaffaleActiveCellId = null;
 let scaffaleFactoryComm  = null; // commessa attualmente aperta nel pannello fabbrica
 let scaffaleFactoryCell  = null; // cella da cui è stata aperta
 
-// ── Dati localStorage ─────────────────────────────────────────────
+// ── Mappa cella → commessa (persistita sul DB) ─────────────────────
+// La sorgente di verità è la tabella `scaffale_celle` sul server, così lo
+// scaffale è identico da qualsiasi browser/PC. In pagina teniamo una cache
+// in memoria (scaffaleCelleCache) caricata all'avvio e aggiornata ad ogni modifica.
 
-// Migra il vecchio formato {id, codice, ...} al nuovo {commessa:{...}, materiali:[]}
-function scaffaleMigraCella(val) {
-    if (!val) return { commessa: null, materiali: [] };
-    if (val.commessa !== undefined) return val;
-    return { commessa: val, materiali: [] };
+let scaffaleCelleCache = {};
+
+// Carica dal DB l'intera mappa cella → commessa nella cache.
+async function scaffaleFetchCelle() {
+    try { scaffaleCelleCache = await scaffaleGet('/scaffale/celle') || {}; }
+    catch { scaffaleCelleCache = {}; }
+    return scaffaleCelleCache;
 }
 
+// Lettura sincrona dalla cache (forma: { "A1": { commessa: {...} } }).
 function scaffaleLoadCelle() {
-    try {
-        const raw = JSON.parse(localStorage.getItem(SCAFFALE_KEY)) || {};
-        const out = {};
-        Object.entries(raw).forEach(([k, v]) => { out[k] = scaffaleMigraCella(v); });
-        return out;
-    } catch { return {}; }
+    return scaffaleCelleCache;
 }
 
-function scaffaleSaveCelle(c) {
-    localStorage.setItem(SCAFFALE_KEY, JSON.stringify(c));
+// Assegna una commessa a una cella sul DB e aggiorna la cache.
+async function scaffaleSetCella(cella, idCommessa) {
+    const r = await fetch(API_BASE + '/scaffale/celle/' + cella, {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token'), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_commessa: idCommessa })
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.errore || r.status); }
+    scaffaleCelleCache[cella] = await r.json();
+}
+
+// Svuota una cella sul DB e aggiorna la cache.
+async function scaffaleClearCella(cella) {
+    const r = await fetch(API_BASE + '/scaffale/celle/' + cella, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+    });
+    if (!r.ok) throw new Error(r.status);
+    delete scaffaleCelleCache[cella];
 }
 
 async function scaffaleGet(path) {
-    const r = await fetch('http://localhost:5001' + path, {
+    const r = await fetch(API_BASE + path, {
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
     });
     if (!r.ok) throw new Error(r.status);
@@ -612,11 +792,10 @@ function scaffaleBuildOverlay() {
                 cell.appendChild(lbl);
             }
 
-            // Click: se la cella ha una commessa apri la "fabbrica", altrimenti assegna la commessa
+            // Click: apre SEMPRE il pannello della cella. Se la cella è vuota, il pannello
+            // mostra come primo passo l'assegnazione della commessa; poi la preparazione.
             cell.addEventListener('click', () => {
-                const c = scaffaleCommessaCella(id);
-                if (c) scaffaleOpenFactory(c, id);
-                else   scaffaleOpenCellModal(id);
+                scaffaleOpenFactory(scaffaleCommessaCella(id) || null, id);
             });
             overlay.appendChild(cell);
         });
@@ -643,29 +822,49 @@ function scaffaleBuildOverlay() {
     });
 }
 
-// ── Modal assegnazione cella ───────────────────────────────────────
+// ── Step di assegnazione commessa (dentro il pannello della cella) ──
+// Mostra nel pannello unico la scelta della commessa; alla conferma passa alla preparazione.
+// `comm` valorizzato = si sta CAMBIANDO la commessa di una cella già assegnata.
+function scaffaleRenderAssegna(cellId, comm) {
+    scaffaleActiveCellId = cellId;
+    const codiceEl = document.getElementById('spCodice');
+    codiceEl.textContent = 'Cella ' + cellId;
+    codiceEl.style.color = '#333';
+    document.querySelector('#scaffalePopupOverlay .sp-header').style.boxShadow = 'none';
+    document.getElementById('spDesc').textContent = comm ? 'Cambia la commessa di questa cella' : 'Cella vuota — assegna una commessa';
 
-function scaffaleOpenCellModal(id) {
-    scaffaleActiveCellId = id;
-    document.getElementById('caTitle').textContent = 'Cella ' + id + ' — commessa';
-    const cella = scaffaleLoadCelle()[id] || {};
-    const selId = cella.commessa ? cella.commessa.id : '';
-    document.getElementById('caBody').innerHTML = `
-        <p class="ca-section-label">Commessa assegnata a questa cella</p>
-        <select class="ca-select" id="caSelect">
-            <option value="">— Nessuna —</option>
-            ${scaffaleCommesse.map(c =>
-                `<option value="${c.id}" ${selId == c.id ? 'selected' : ''}>${c.codice}${c.descrizione ? ' — ' + c.descrizione : ''}</option>`
-            ).join('')}
-        </select>
-        <p class="ca-hint"><i class="fa-solid fa-circle-info"></i> Assegnata la commessa, clicca la cella per aprire la preparazione dei materiali.</p>
-    `;
-    document.getElementById('cellAssignOverlay').classList.add('open');
-}
+    const body = document.getElementById('spBody');
+    body.innerHTML = `
+        <div class="fb-assign">
+            <p class="fb-assign-label"><i class="fa-solid fa-clipboard-list"></i> Quale commessa vuoi preparare in questa cella?</p>
+            <div class="fb-assign-mount"></div>
+            <div class="fb-assign-actions">
+                ${comm ? '<button class="fb-assign-cancel" id="fbAssignCancel">Annulla</button>' : ''}
+                <button class="fb-assign-save" id="fbAssignSave"><i class="fa-solid fa-check"></i> Assegna e prepara</button>
+            </div>
+            <p class="fb-assign-hint"><i class="fa-solid fa-circle-info"></i> Alla conferma si apre subito la preparazione dei materiali.</p>
+        </div>`;
 
-function scaffaleCloseCellModal() {
-    document.getElementById('cellAssignOverlay').classList.remove('open');
-    scaffaleActiveCellId = null;
+    const opzioni = scaffaleCommesse.map(c => ({
+        value: String(c.id), codice: c.codice,
+        desc: c.descrizione || '', label: c.codice + (c.descrizione ? ' — ' + c.descrizione : '')
+    }));
+    const combo = creaAutocomplete(opzioni, 'Cerca commessa per codice o descrizione...',
+        { id: 'caSelect', value: comm ? comm.id : '', wide: true });
+    body.querySelector('.fb-assign-mount').appendChild(combo);
+
+    document.getElementById('fbAssignSave').addEventListener('click', async () => {
+        const sel = document.getElementById('caSelect');
+        const idc = sel && sel.value;
+        if (!idc) { combo.querySelector('.ac-input').focus(); return; }
+        const scelta = scaffaleCommesse.find(c => String(c.id) === String(idc));
+        try { await scaffaleSetCella(cellId, scelta.id); }
+        catch { alert('Impossibile salvare la cella (errore di rete).'); return; }
+        scaffaleBuildOverlay();
+        scaffaleOpenFactory(scelta, cellId);   // passa subito alla preparazione
+    });
+    const cancel = document.getElementById('fbAssignCancel');
+    if (cancel) cancel.addEventListener('click', () => { if (comm) scaffaleOpenFactory(comm, cellId); });
 }
 
 // ── Pannello "fabbrica": preparazione materiali di una commessa ────
@@ -690,8 +889,11 @@ function scaffaleAggregaMateriali(macchina) {
 }
 
 async function scaffaleOpenFactory(comm, cellId) {
-    scaffaleFactoryComm = comm;
+    scaffaleFactoryComm = comm || null;
     scaffaleFactoryCell = cellId || null;
+    document.getElementById('scaffalePopupOverlay').classList.add('open');
+    // Cella senza commessa → primo passo: assegnazione (nello stesso pannello)
+    if (!comm) { scaffaleRenderAssegna(cellId, null); return; }
     const col = scaffaleColoreCommessa(comm.id);
     const codiceEl = document.getElementById('spCodice');
     codiceEl.textContent = comm.codice || ('Commessa ' + comm.id);
@@ -699,7 +901,6 @@ async function scaffaleOpenFactory(comm, cellId) {
     document.querySelector('#scaffalePopupOverlay .sp-header').style.boxShadow = 'inset 0 4px 0 ' + col.border;
     document.getElementById('spDesc').textContent   = comm.descrizione || '';
     document.getElementById('spBody').innerHTML = '<div class="sp-loading"><i class="fa-solid fa-spinner fa-spin"></i> Caricamento...</div>';
-    document.getElementById('scaffalePopupOverlay').classList.add('open');
     await scaffaleRefreshFactory();
 }
 
@@ -721,6 +922,7 @@ function scaffaleRenderFactory(albero) {
         <div class="fb-toolbar-actions">
             <button class="goto-btn" id="fbGotoGrafo" title="Apri il grafo di completamento della commessa"><i class="fa-solid fa-diagram-project"></i> Completamento</button>
             ${scaffaleFactoryCell ? '<button class="fb-change-comm" id="fbChangeComm"><i class="fa-solid fa-pen"></i> Cambia commessa</button>' : ''}
+            ${scaffaleFactoryCell ? '<button class="fb-clear-cell" id="fbClearCell" title="Togli la commessa da questa cella"><i class="fa-solid fa-trash"></i> Svuota cella</button>' : ''}
         </div>
     </div>`;
 
@@ -770,9 +972,16 @@ function scaffaleRenderFactory(albero) {
 
     const chg = document.getElementById('fbChangeComm');
     if (chg) chg.addEventListener('click', () => {
-        const cellId = scaffaleFactoryCell;
+        // cambia commessa restando nello stesso pannello (step di assegnazione inline)
+        scaffaleRenderAssegna(scaffaleFactoryCell, scaffaleFactoryComm);
+    });
+    const clr = document.getElementById('fbClearCell');
+    if (clr) clr.addEventListener('click', async () => {
+        if (!confirm('Vuoi togliere la commessa da questa cella? I materiali già preparati restano, la cella torna vuota.')) return;
+        try { await scaffaleClearCella(scaffaleFactoryCell); }
+        catch { alert('Impossibile svuotare la cella (errore di rete).'); return; }
+        scaffaleBuildOverlay();
         scaffaleClosePopup();
-        if (cellId) scaffaleOpenCellModal(cellId);
     });
     const goto = document.getElementById('fbGotoGrafo');
     if (goto) goto.addEventListener('click', () => {
@@ -790,7 +999,7 @@ async function scaffaleAssegna(cm, mat, qty, preleva) {
     if (!qty || qty < 1) qty = 1;
     const azione = preleva ? 'fornisci' : 'restituisci';
     try {
-        const r = await fetch('http://localhost:5001/commessa-macchine/' + cm + '/materiale/' + mat + '/' + azione, {
+        const r = await fetch(API_BASE + '/commessa-macchine/' + cm + '/materiale/' + mat + '/' + azione, {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token'), 'Content-Type': 'application/json' },
             body: JSON.stringify({ quantita: qty })
@@ -856,6 +1065,9 @@ function scaffaleClearHighlights() {
 
 function scaffaleClosePopup() {
     document.getElementById('scaffalePopupOverlay').classList.remove('open');
+    scaffaleFactoryComm = null;
+    scaffaleFactoryCell = null;
+    scaffaleActiveCellId = null;
     scaffaleClearHighlights();
 }
 
@@ -866,48 +1078,18 @@ async function scaffaleInit() {
 
     try { scaffaleCommesse  = await scaffaleGet('/commesse'); }  catch { scaffaleCommesse = []; }
     try { scaffaleMateriali = await scaffaleGet('/materiale'); } catch { scaffaleMateriali = []; }
+    await scaffaleFetchCelle();   // mappa cella→commessa dal DB
 
     scaffaleBuildOverlay();
     scaffaleInitSearch();
 
-    // Modal cella: chiudi
-    document.getElementById('caClose').addEventListener('click', scaffaleCloseCellModal);
-    document.getElementById('cellAssignOverlay').addEventListener('click', e => {
-        if (e.target === e.currentTarget) scaffaleCloseCellModal();
-    });
-
-    // Modal cella: svuota
-    document.getElementById('caBtnClear').addEventListener('click', () => {
-        if (!scaffaleActiveCellId) return;
-        const celle = scaffaleLoadCelle();
-        delete celle[scaffaleActiveCellId];
-        scaffaleSaveCelle(celle);
-        scaffaleBuildOverlay();
-        scaffaleCloseCellModal();
-    });
-
-    // Modal cella: salva la commessa della cella, poi apre la preparazione materiali
-    document.getElementById('caBtnSave').addEventListener('click', () => {
-        if (!scaffaleActiveCellId) return;
-        const sel    = document.getElementById('caSelect');
-        const celle  = scaffaleLoadCelle();
-        const comm   = sel && sel.value ? scaffaleCommesse.find(c => String(c.id) === sel.value) : null;
-        const cellId = scaffaleActiveCellId;
-        if (!comm) {
-            delete celle[cellId];
-        } else {
-            celle[cellId] = { commessa: { id: comm.id, codice: comm.codice, descrizione: comm.descrizione, stato: comm.stato, anno: comm.anno } };
-        }
-        scaffaleSaveCelle(celle);
-        scaffaleBuildOverlay();
-        scaffaleCloseCellModal();
-        if (comm) scaffaleOpenFactory(comm, cellId);
-    });
-
-    // Popup: chiudi
+    // Pannello cella (unico): chiudi cliccando la X, lo sfondo o premendo Esc
     document.getElementById('spClose').addEventListener('click', scaffaleClosePopup);
     document.getElementById('scaffalePopupOverlay').addEventListener('click', e => {
         if (e.target === e.currentTarget) scaffaleClosePopup();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && document.getElementById('scaffalePopupOverlay').classList.contains('open')) scaffaleClosePopup();
     });
 
     // Arrivo da un link esterno (?commessa=<id>): apri direttamente la fabbrica della commessa

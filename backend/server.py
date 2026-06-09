@@ -154,6 +154,24 @@ class Utente(db.Model):
     ruolo                = db.Column(db.Enum('Admin', 'Dipendente', 'Terzista'), nullable=False)
     push_token           = db.Column(db.String(255))
 
+class ScaffaleCella(db.Model):
+    # Mappa una cella fisica dello scaffale (es. "A1") alla commessa che vi è preparata.
+    # Persiste l'assegnazione sul DB così lo scaffale è identico da qualsiasi browser/PC.
+    __tablename__ = 'scaffale_celle'
+    cella        = db.Column(db.String(8), primary_key=True)
+    id_commessa  = db.Column(db.Integer, db.ForeignKey('commesse.id'), nullable=False)
+
+class AvanzamentoConfermato(db.Model):
+    # Conferma MANUALE di avanzamento nel grafo di commessa: un materiale (rich_mat) o un
+    # processo/sottolavorazione (lavorazione) conta nel progresso SOLO dopo che l'utente lo
+    # ha trascinato sul padre. Persistito sul DB (niente localStorage). Annullabile.
+    __tablename__ = 'avanzamenti_confermati'
+    id                   = db.Column(db.Integer, primary_key=True)
+    id_commessa_macchina = db.Column(db.Integer, db.ForeignKey('commessa_macchine.id'), nullable=False)
+    tipo                 = db.Column(db.Enum('rich_mat', 'lavorazione'), nullable=False)
+    ref_id               = db.Column(db.Integer, nullable=False)
+    __table_args__       = (db.UniqueConstraint('id_commessa_macchina', 'tipo', 'ref_id', name='uq_avanz'),)
+
 
 # ── DECORATORI ───────────────────────────────────────────────────────────────
 
@@ -220,6 +238,7 @@ def _sezione_da_path(path):
     if path.startswith('/materiale'):          return 'Materie Prime'
     if path.startswith('/clienti'):            return 'Clienti'
     if path.startswith('/utenti'):             return 'Utenti'
+    if path.startswith('/scaffale'):           return 'Scaffalatura'
     return 'Altro'
 
 def _utente_corrente():
@@ -359,9 +378,16 @@ def stato_lavorazione_cm(cm_id, cm_quantita, id_lav):
     return "IN_ATTESA"
 
 
-def build_albero_commessa(cm, id_lav, padre_completo, visitati):
+def conferme_cm(cm_id):
+    """Insieme delle conferme manuali di avanzamento per una macchina-in-commessa,
+    come set di tuple (tipo, ref_id). Usato per marcare `confermato` nell'albero."""
+    return {(r["tipo"], r["ref_id"]) for r in q_all(
+        "SELECT tipo, ref_id FROM avanzamenti_confermati WHERE id_commessa_macchina = :cm", cm=cm_id)}
+
+
+def build_albero_commessa(cm, id_lav, padre_completo, visitati, conf):
     """Albero OPERATIVO per una macchina-in-commessa: stato derivato, forniture, lock sequenza.
-    `cm` è un dizionario con chiavi id, id_macchina, quantita."""
+    `cm` è un dizionario con chiavi id, id_macchina, quantita. `conf` = set di (tipo, ref_id) confermati."""
     if id_lav in visitati:
         return None
     visitati = visitati | {id_lav}
@@ -381,6 +407,7 @@ def build_albero_commessa(cm, id_lav, padre_completo, visitati):
         "target": r["quantita"] * cm["quantita"],
         "quantita_fornita": r["fornita"],
         "quantita_stock": r["stock"],
+        "confermato": ("rich_mat", r["id"]) in conf,
         "tipo": "rich_mat"
     } for r in q_all(
         "SELECT r.id, r.id_materiale, r.quantita, "
@@ -394,7 +421,7 @@ def build_albero_commessa(cm, id_lav, padre_completo, visitati):
     figli = []
     completa = (stato == "COMPLETATA")
     for sub in q_all("SELECT id FROM lavorazioni WHERE tav_padre = :id", id=id_lav):
-        figlio = build_albero_commessa(cm, sub["id"], completa, visitati)
+        figlio = build_albero_commessa(cm, sub["id"], completa, visitati, conf)
         if figlio:
             figli.append(figlio)
 
@@ -403,6 +430,7 @@ def build_albero_commessa(cm, id_lav, padre_completo, visitati):
         "descrizione": desc_processo(lav),
         "tipo": "lavorazione",
         "stato": stato,
+        "confermato": ("lavorazione", lav["id"]) in conf,
         # un semilavorato si produce dai suoi materiali a prescindere dalla sequenza → mai bloccato
         "bloccato": (not padre_completo) and not lav["id_semilavorato"],
         "rich_mat": materiali,
@@ -410,14 +438,17 @@ def build_albero_commessa(cm, id_lav, padre_completo, visitati):
     }
 
 
-def serializza_richmat_diretti_commessa(cm):
-    """Materiali diretti della macchina (senza processo) — vista operativa commessa."""
+def serializza_richmat_diretti_commessa(cm, conf):
+    """Materiali diretti della macchina (senza processo) — vista operativa commessa.
+    `conf` = set di (tipo, ref_id) confermati."""
     return [{
         "rich_mat_id": r["id"], "id_materiale": r["id_materiale"],
         "codice": r["codice"], "descrizione": r["descrizione"],
         "quantita_richiesta": r["quantita"], "target": r["quantita"] * cm["quantita"],
         "quantita_fornita": r["fornita"],
-        "quantita_stock": r["stock"], "tipo": "rich_mat"
+        "quantita_stock": r["stock"],
+        "confermato": ("rich_mat", r["id"]) in conf,
+        "tipo": "rich_mat"
     } for r in q_all(
         "SELECT r.id, r.id_materiale, r.quantita, "
         "       m.CodiceMateriale AS codice, m.Descrizione AS descrizione, m.Quantita AS stock, "
@@ -429,10 +460,12 @@ def serializza_richmat_diretti_commessa(cm):
 
 
 def progresso_commessa(id_commessa):
-    """Percentuale di avanzamento: unità fornite / unità totali sui materiali foglia della commessa."""
+    """Percentuale di avanzamento: target dei materiali CONFERMATI / target totale.
+    Conta solo gli avanzamenti confermati manualmente (trascinati), non la sola preparazione."""
     forn = 0.0
     tot = 0.0
     for cm in q_all("SELECT id, id_macchina, quantita FROM commessa_macchine WHERE id_commessa = :idc", idc=id_commessa):
+        conf = conferme_cm(cm["id"])
         # materiali sotto i processi della macchina + materiali diretti della macchina
         richs = q_all(
             "SELECT r.id, r.quantita FROM rich_mat r "
@@ -442,10 +475,9 @@ def progresso_commessa(id_commessa):
             "WHERE r.id_macchina = :idm AND r.id_lavorazione IS NULL", idm=cm["id_macchina"])
         for r in richs:
             target = r["quantita"] * cm["quantita"]
-            f = q_one("SELECT quantita_fornita FROM fornitura_materiali "
-                      "WHERE id_commessa_macchina = :cm AND id_rich_mat = :rm", cm=cm["id"], rm=r["id"])
-            forn += min(f["quantita_fornita"] if f else 0, target)
             tot += target
+            if ("rich_mat", r["id"]) in conf:
+                forn += target
     return round(100 * forn / tot) if tot > 0 else 0
 
 
@@ -656,9 +688,10 @@ def get_albero_commessa(id):
             "SELECT cm.id, cm.id_macchina, cm.quantita, cm.collassata, m.codice, m.descrizione "
             "FROM commessa_macchine cm JOIN macchine m ON cm.id_macchina = m.id "
             "WHERE cm.id_commessa = :id", id=id):
+        conf = conferme_cm(cm["id"])
         lavs = []
         for lav in q_all("SELECT id FROM lavorazioni WHERE id_macchina = :idm AND tav_padre IS NULL", idm=cm["id_macchina"]):
-            albero = build_albero_commessa(cm, lav["id"], True, set())
+            albero = build_albero_commessa(cm, lav["id"], True, set(), conf)
             if albero:
                 lavs.append(albero)
         macchine.append({
@@ -667,7 +700,7 @@ def get_albero_commessa(id):
             "quantita": cm["quantita"], "tipo": "macchina",
             "collassata": bool(cm["collassata"]),
             "lavorazioni": lavs,
-            "materiali_diretti": serializza_richmat_diretti_commessa(cm)
+            "materiali_diretti": serializza_richmat_diretti_commessa(cm, conf)
         })
 
     return jsonify({
@@ -686,6 +719,40 @@ def collassa_macchina(cm_id):
     val = 1 if data.get("collassata") else 0
     q_exec("UPDATE commessa_macchine SET collassata = :v WHERE id = :id", v=val, id=cm_id)
     return jsonify({"messaggio": "Stato aggiornato", "collassata": bool(val)}), 200
+
+
+@app.route("/commessa-macchine/<int:cm_id>/conferma/<tipo>/<int:ref_id>", methods=["POST"])
+@jwt_required()
+def conferma_avanzamento(cm_id, tipo, ref_id):
+    """Conferma manualmente l'avanzamento di un materiale (rich_mat) o processo (lavorazione):
+    da qui in poi conta nel progresso. Idempotente. Non tocca le forniture/magazzino."""
+    if tipo not in ("rich_mat", "lavorazione"):
+        return jsonify({"errore": "Tipo non valido"}), 400
+    cm = q_one("SELECT id, quantita FROM commessa_macchine WHERE id = :id", id=cm_id)
+    if not cm:
+        return jsonify({"errore": "Commessa-macchina non trovata"}), 404
+    # un materiale può essere confermato solo se è completo in scaffalatura
+    if tipo == "rich_mat":
+        rm = q_one("SELECT quantita FROM rich_mat WHERE id = :r", r=ref_id)
+        forn = q_scalar("SELECT quantita_fornita FROM fornitura_materiali "
+                        "WHERE id_commessa_macchina = :cm AND id_rich_mat = :r", cm=cm_id, r=ref_id) or 0
+        if rm and forn < rm["quantita"] * cm["quantita"]:
+            return jsonify({"errore": "Materiale non ancora completo in scaffalatura"}), 400
+    if not q_one("SELECT id FROM avanzamenti_confermati "
+                 "WHERE id_commessa_macchina = :cm AND tipo = :t AND ref_id = :r", cm=cm_id, t=tipo, r=ref_id):
+        q_exec("INSERT INTO avanzamenti_confermati (id_commessa_macchina, tipo, ref_id) "
+               "VALUES (:cm, :t, :r)", cm=cm_id, t=tipo, r=ref_id)
+    return jsonify({"messaggio": "Avanzamento confermato"}), 200
+
+
+@app.route("/commessa-macchine/<int:cm_id>/conferma/<tipo>/<int:ref_id>", methods=["DELETE"])
+@jwt_required()
+def annulla_avanzamento(cm_id, tipo, ref_id):
+    """Annulla una conferma di avanzamento (se si è sbagliato). I materiali preparati
+    in scaffalatura restano invariati: si annulla solo il conteggio nel grafo/progresso."""
+    q_exec("DELETE FROM avanzamenti_confermati "
+           "WHERE id_commessa_macchina = :cm AND tipo = :t AND ref_id = :r", cm=cm_id, t=tipo, r=ref_id)
+    return jsonify({"messaggio": "Conferma annullata"}), 200
 
 
 # ── PREPARAZIONE MATERIALI (scaffalatura: assegna per quantità, senza sequenza) ──
@@ -793,6 +860,47 @@ def restituisci_materiale_quantita(cm_id, mat_id):
 
     stock = q_scalar("SELECT Quantita FROM materialeMagazzino WHERE id = :id", id=mat_id)
     return jsonify({"messaggio": "Materiale restituito", "restituito": restituito, "quantita_stock": stock}), 200
+
+
+# ── SCAFFALATURA (mappa cella → commessa) ─────────────────────────────────────
+# Persiste su DB quale commessa è preparata in ogni cella fisica dello scaffale,
+# così lo scaffale è identico da qualsiasi browser/PC (non più solo in localStorage).
+
+def _commessa_per_scaffale(c):
+    """Forma compatta della commessa usata dallo scaffale (stessi nomi del frontend)."""
+    return {"id": c["id"], "codice": c["codice_commessa"], "descrizione": c["descrizione"],
+            "anno": c["anno"], "stato": c["stato_chiusura"]}
+
+@app.route("/scaffale/celle", methods=["GET"])
+@jwt_required()
+def get_scaffale_celle():
+    """Mappa completa cella → commessa, nella forma { "A1": { "commessa": {...} }, ... }."""
+    righe = q_all(
+        "SELECT s.cella, c.id, c.codice_commessa, c.descrizione, c.anno, c.stato_chiusura "
+        "FROM scaffale_celle s JOIN commesse c ON s.id_commessa = c.id")
+    return jsonify({r["cella"]: {"commessa": _commessa_per_scaffale(r)} for r in righe}), 200
+
+@app.route("/scaffale/celle/<cella>", methods=["PUT"])
+@jwt_required()
+def set_scaffale_cella(cella):
+    """Assegna (o riassegna) una commessa a una cella. Restituisce { "commessa": {...} }."""
+    data = request.get_json() or {}
+    id_commessa = data.get("id_commessa")
+    if not id_commessa:
+        return jsonify({"errore": "id_commessa mancante"}), 400
+    c = q_one("SELECT id, codice_commessa, descrizione, anno, stato_chiusura FROM commesse WHERE id = :id", id=id_commessa)
+    if not c:
+        return jsonify({"errore": "Commessa non trovata"}), 404
+    q_exec("INSERT INTO scaffale_celle (cella, id_commessa) VALUES (:cella, :idc) "
+           "ON DUPLICATE KEY UPDATE id_commessa = :idc", cella=cella, idc=id_commessa)
+    return jsonify({"commessa": _commessa_per_scaffale(c)}), 200
+
+@app.route("/scaffale/celle/<cella>", methods=["DELETE"])
+@jwt_required()
+def del_scaffale_cella(cella):
+    """Svuota una cella (rimuove l'assegnazione di commessa)."""
+    q_exec("DELETE FROM scaffale_celle WHERE cella = :cella", cella=cella)
+    return jsonify({"messaggio": "Cella svuotata"}), 200
 
 
 # ── MACCHINE ──────────────────────────────────────────────────────────────────

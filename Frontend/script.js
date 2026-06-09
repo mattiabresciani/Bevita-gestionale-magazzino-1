@@ -1,4 +1,5 @@
-const API = 'http://localhost:5001';
+// Usa lo stesso host della pagina (localhost o 127.0.0.1) per evitare mismatch di origine
+const API = 'http://' + location.hostname + ':5001';
 const token = localStorage.getItem('token');
 if (!token) window.location.href = 'login.html';
 
@@ -17,7 +18,7 @@ async function apiFetch(path, method = 'GET', body = null) {
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(API + path, opts);
     if (res.status === 401) {
-        localStorage.clear();
+        localStorage.removeItem('token');   // coerente con logoutUtente(): rimuove solo il token
         window.location.href = 'login.html';
         return null;
     }
@@ -53,66 +54,8 @@ function coloreLavorazione(key) {
     return _PALETTA_LAV[h % _PALETTA_LAV.length];
 }
 
-// Combobox con ricerca: input di testo + elenco filtrato. opzioni = [{value, label, tag}].
-// L'elenco è appeso al body (posizione fissa) per non essere tagliato dai contenitori con overflow:hidden.
-// Ritorna un elemento con metodi .getValore() (opzione scelta o null) e .reset().
-function creaAutocomplete(opzioni, placeholder) {
-    const wrap = document.createElement('div');
-    wrap.className = 'ac-wrap';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'tree-input ac-input';
-    input.placeholder = placeholder || 'Cerca...';
-    input.autocomplete = 'off';
-    wrap.appendChild(input);
-
-    const list = document.createElement('div');
-    list.className = 'ac-list';
-    list.style.display = 'none';
-    document.body.appendChild(list);
-
-    // rimuove la lista (appesa al body) quando l'input viene tolto dal DOM
-    const obs = new MutationObserver(() => {
-        if (!document.body.contains(input)) { list.remove(); obs.disconnect(); }
-    });
-    obs.observe(document.body, { childList: true, subtree: true });
-
-    let selezionato = null;
-
-    function posiziona() {
-        const r = input.getBoundingClientRect();
-        list.style.left = r.left + 'px';
-        list.style.top = (r.bottom + 4) + 'px';
-        list.style.width = r.width + 'px';
-    }
-    function render() {
-        const q = input.value.toLowerCase().trim();
-        const filt = (q ? opzioni.filter(o => o.label.toLowerCase().includes(q)) : opzioni).slice(0, 60);
-        list.innerHTML = filt.length
-            ? filt.map((o, i) => '<div class="ac-item" data-i="' + i + '"><span>' + o.label + '</span>' +
-                (o.tag ? '<span class="ac-tag ac-tag-' + o.tag.replace(/\s+/g, '-') + '">' + o.tag + '</span>' : '') + '</div>').join('')
-            : '<div class="ac-empty">Nessun risultato</div>';
-        list.querySelectorAll('.ac-item').forEach(el => {
-            el.addEventListener('mousedown', e => {   // mousedown: scatta prima del blur
-                e.preventDefault();
-                selezionato = filt[Number(el.dataset.i)];
-                input.value = selezionato.label;
-                input.classList.add('ac-scelto');
-                list.style.display = 'none';
-            });
-        });
-        posiziona();
-        list.style.display = '';
-    }
-
-    input.addEventListener('input', () => { selezionato = null; input.classList.remove('ac-scelto'); render(); });
-    input.addEventListener('focus', render);
-    input.addEventListener('blur', () => setTimeout(() => { list.style.display = 'none'; }, 150));
-
-    wrap.getValore = () => selezionato;
-    wrap.reset = () => { selezionato = null; input.value = ''; input.classList.remove('ac-scelto'); list.style.display = 'none'; };
-    return wrap;
-}
+// Il combobox con ricerca `creaAutocomplete` è definito in framework.js (caricato su
+// tutte le pagine), così è condiviso tra gestionale e scaffalatura.
 
 // ── RICERCA ───────────────────────────────────────────────────────────────────
 
@@ -382,17 +325,20 @@ async function caricaRicettaSemilavorato(idSem) {
     // 1) Selettore lavorazione (processo) del semilavorato
     const procRow = document.createElement('div');
     procRow.className = 'tree-add-row';
-    procRow.innerHTML =
-        '<label style="font-size:13px;color:#555;">Lavorazione:</label>' +
-        '<select id="sl-proc-' + idSem + '" class="tree-input tree-input-wide">' +
-            '<option value="">— Seleziona processo —</option>' +
-            processi.map(p => '<option value="' + p.id + '"' + (rec.id_processo === p.id ? ' selected' : '') + '>' + (p.descrizione ?? '-') + '</option>').join('') +
-        '</select>';
+    const procLabel = document.createElement('label');
+    procLabel.style.cssText = 'font-size:13px;color:#555;';
+    procLabel.textContent = 'Lavorazione:';
+    procRow.appendChild(procLabel);
+    const procCombo = creaAutocomplete(
+        processi.map(p => ({ value: String(p.id), label: p.descrizione ?? '-' })),
+        '— Seleziona processo —',
+        { id: 'sl-proc-' + idSem, value: rec.id_processo, wide: true,
+          onChange: async o => {
+              await apiFetch('/semilavorati/' + idSem, 'PUT', { id_processo: o ? Number(o.value) : null });
+              caricaSezione('semilavorati');
+          } });
+    procRow.appendChild(procCombo);
     tree.appendChild(procRow);
-    document.getElementById('sl-proc-' + idSem).addEventListener('change', async function() {
-        await apiFetch('/semilavorati/' + idSem, 'PUT', { id_processo: this.value ? Number(this.value) : null });
-        caricaSezione('semilavorati');
-    });
 
     // 2) Lista componenti
     if (componenti.length) {
@@ -633,25 +579,26 @@ async function caricaMacchineCommessa(idCommessa) {
 
     const addRow = document.createElement('div');
     addRow.className = 'tree-add-row';
-    const opzioni = listaMac.map(m => 
-        '<option value="' + m.id + '">' + (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') + '</option>'
-    ).join('');
     addRow.innerHTML =
-        '<select id="mc-sel-' + idCommessa + '" class="tree-input tree-input-wide">' +
-            '<option value="">Seleziona macchina...</option>' + opzioni +
-        '</select>' +
+        '<span class="mc-sel-mount" style="flex:1;min-width:0;"></span>' +
         '<input type="number" placeholder="Qtà" id="mc-qty-' + idCommessa + '" class="tree-input tree-input-sm" value="1" min="1" step="1">' +
         '<select id="mc-stato-' + idCommessa + '" class="tree-input">' +
             '<option value="DA_PRODURRE">Da produrre</option>' +
             '<option value="IN_MAGAZZINO">In magazzino</option>' +
         '</select>' +
         '<button class="bom-confirm-btn" id="mc-add-' + idCommessa + '" title="Aggiungi macchina"><i class="fa-solid fa-plus"></i></button>';
+    const macCombo = creaAutocomplete(
+        listaMac.map(m => ({ value: String(m.id), codice: m.codice ?? '-', desc: m.descrizione ?? '',
+                             label: (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') })),
+        'Cerca macchina per codice o descrizione...',
+        { id: 'mc-sel-' + idCommessa, wide: true });
+    addRow.querySelector('.mc-sel-mount').appendChild(macCombo);
     tree.appendChild(addRow);
 
     document.getElementById('mc-add-' + idCommessa).addEventListener('click', async function() {
         const sel = document.getElementById('mc-sel-' + idCommessa);
         const idMac = sel?.value;
-        if (!idMac) { sel?.focus(); return; }
+        if (!idMac) { macCombo.querySelector('.ac-input')?.focus(); return; }
         const qty   = parseInt(document.getElementById('mc-qty-' + idCommessa).value) || 1;
         const stato = document.getElementById('mc-stato-' + idCommessa).value;
         this.disabled = true;
@@ -1160,9 +1107,6 @@ async function apriModaleElemento(idMac, opts = {}) {
     const lavs      = (lv && lv.ok) ? await lv.json() : [];
     const semilav   = (sl && sl.ok) ? await sl.json() : [];
 
-    const procOpts = processi.map(p => '<option value="' + p.id + '">' + (p.descrizione ?? '-') + '</option>').join('');
-    const lavOpts  = lavs.map(l => '<option value="' + l.id + '">' + (l.descrizione ?? ('#' + l.id)) + '</option>').join('');
-
     const ov = document.createElement('div');
     ov.className = 'modal-overlay open';
     ov.innerHTML =
@@ -1174,9 +1118,9 @@ async function apriModaleElemento(idMac, opts = {}) {
                 '<option value="materia">Materia prima</option>' +
                 '<option value="semilavorato">Semilavorato</option></select></div>' +
             '<div class="modal-field el-proc"><label>Processo (dal catalogo Lavorazioni)</label>' +
-                '<select id="el_proc"><option value="">Seleziona...</option>' + procOpts + '</select></div>' +
+                '<div class="el-proc-mount"></div></div>' +
             '<div class="modal-field el-proc"><label>Processo precedente</label>' +
-                '<select id="el_prec"><option value="">— Nessuno (iniziale) —</option>' + lavOpts + '</select></div>' +
+                '<div class="el-prec-mount"></div></div>' +
             '<div class="modal-field el-mat"><label>Materia prima</label><div class="el-mat-mount"></div></div>' +
             '<div class="modal-field el-sem"><label>Semilavorato</label><div class="el-sem-mount"></div></div>' +
             '<div class="modal-field el-comp"><label>Quantità</label>' +
@@ -1184,7 +1128,7 @@ async function apriModaleElemento(idMac, opts = {}) {
             '<div class="modal-field el-comp"><label>Posizione</label>' +
                 '<select id="el_pos"><option value="diretto">Diretta sulla macchina</option><option value="sotto">Sotto un processo</option></select></div>' +
             '<div class="modal-field el-comp el-sotto"><label>Processo</label>' +
-                '<select id="el_lav"><option value="">Seleziona...</option>' + lavOpts + '</select></div>' +
+                '<div class="el-lav-mount"></div></div>' +
         '</div>' +
         '<div class="modal-footer"><button class="modal-btn-cancel">Annulla</button>' +
         '<button class="modal-btn-save">Salva</button></div></div>';
@@ -1193,9 +1137,17 @@ async function apriModaleElemento(idMac, opts = {}) {
     const $  = s => ov.querySelector(s);
     const hide = (sel, h) => ov.querySelectorAll(sel).forEach(e => e.style.display = h ? 'none' : '');
 
-    // barre di ricerca al posto dei menu a tendina pieni di voci
-    const matCombo = creaAutocomplete(materiali.map(m => ({ value: String(m.id), label: (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') })), 'Cerca materia prima...');
-    const semCombo = creaAutocomplete(semilav.map(s => ({ value: String(s.id), label: (s.codice || s.descrizione || '-') })), 'Cerca semilavorato...');
+    // barre di ricerca (combobox) al posto dei menu a tendina pieni di voci
+    const lavOpzioni = lavs.map(l => ({ value: String(l.id), label: l.descrizione ?? ('#' + l.id) }));
+    const procCombo = creaAutocomplete(processi.map(p => ({ value: String(p.id), label: p.descrizione ?? '-' })),
+        'Cerca processo...', { id: 'el_proc', wide: true });
+    const precCombo = creaAutocomplete(lavOpzioni, '— Nessuno (iniziale) —', { id: 'el_prec', wide: true });
+    const lavCombo  = creaAutocomplete(lavOpzioni, 'Cerca processo...', { id: 'el_lav', wide: true });
+    const matCombo = creaAutocomplete(materiali.map(m => ({ value: String(m.id), codice: m.codice ?? '-', desc: m.descrizione ?? '', label: (m.codice ?? '-') + ' — ' + (m.descrizione ?? '') })), 'Cerca materia prima per codice o descrizione...');
+    const semCombo = creaAutocomplete(semilav.map(s => ({ value: String(s.id), codice: s.codice || '', desc: s.descrizione || '', label: (s.codice ? s.codice + ' — ' : '') + (s.descrizione || s.codice || '-') })), 'Cerca semilavorato...');
+    $('.el-proc-mount').appendChild(procCombo);
+    $('.el-prec-mount').appendChild(precCombo);
+    $('.el-lav-mount').appendChild(lavCombo);
     $('.el-mat-mount').appendChild(matCombo);
     $('.el-sem-mount').appendChild(semCombo);
     function aggiorna() {
@@ -1210,9 +1162,9 @@ async function apriModaleElemento(idMac, opts = {}) {
     $('#el_pos').addEventListener('change', aggiorna);
 
     if (opts.tipo)      $('#el_tipo').value = opts.tipo;
-    if (opts.parent)    $('#el_prec').value = opts.parent;
+    if (opts.parent)    precCombo.setValore(opts.parent);
     if (opts.posizione) $('#el_pos').value  = opts.posizione;
-    if (opts.targetLav) $('#el_lav').value  = opts.targetLav;
+    if (opts.targetLav) lavCombo.setValore(opts.targetLav);
     aggiorna();
 
     const chiudi = () => ov.remove();
@@ -1321,28 +1273,52 @@ async function collassaMacchina(cmId, val) {
     if (r && r.ok && _commessaCorrente) caricaAlberoCommessa(_commessaCorrente);
 }
 
-// Una lavorazione è completa se il suo stato è COMPLETATA e tutti i sotto-processi lo sono
-function lavTuttoCompleto(lav) {
-    if (lav.stato !== 'COMPLETATA') return false;
-    return (lav.figli || []).every(lavTuttoCompleto);
+// Conferma manuale dell'avanzamento (materiale o processo) = persistente nel DB. Poi ricarica il grafo.
+async function confermaAvanzamento(cmId, tipo, refId) {
+    await apiFetch('/commessa-macchine/' + cmId + '/conferma/' + tipo + '/' + refId, 'POST');
+    if (_commessaCorrente) caricaAlberoCommessa(_commessaCorrente);
 }
-// Una macchina è completa se tutti i processi sono completati e tutti i materiali diretti forniti
+// Annulla una conferma (se si è sbagliato). I materiali in scaffalatura restano invariati.
+async function annullaAvanzamento(cmId, tipo, refId) {
+    await apiFetch('/commessa-macchine/' + cmId + '/conferma/' + tipo + '/' + refId, 'DELETE');
+    if (_commessaCorrente) caricaAlberoCommessa(_commessaCorrente);
+}
+
+// ── AVANZAMENTO MANUALE: un elemento "conta" solo dopo che l'utente lo trascina sul padre ──
+// Un materiale è completo in scaffalatura quando le unità preparate raggiungono il target.
+function rmCompleto(r) { return r.quantita_fornita >= r.target; }
+// "Pronto da confermare": completo ma non ancora trascinato sul padre.
+function rmPronto(r)   { return rmCompleto(r) && !r.confermato; }
+
+// Una lavorazione è CONFERMABILE (trascinabile sul padre) quando TUTTI i suoi materiali e
+// TUTTE le sue sottolavorazioni sono già confermati — e non è bloccata né già confermata.
+function lavConfermabile(lav) {
+    if (lav.bloccato || lav.confermato) return false;
+    const matOk = (lav.rich_mat || []).every(r => r.confermato);
+    const figOk = (lav.figli || []).every(f => f.confermato);
+    return matOk && figOk;
+}
+// In corso = qualcosa è già stato preparato/confermato, ma non è ancora tutto confermato.
+function lavInCorso(lav) {
+    return (lav.rich_mat || []).some(r => r.confermato || r.quantita_fornita > 0)
+        || (lav.figli || []).some(f => f.confermato || lavInCorso(f));
+}
+// Una macchina è completa (trascinabile sulla commessa) quando tutti i processi e i
+// materiali diretti sono CONFERMATI.
 function macchinaCompleta(m) {
-    const procOk = (m.lavorazioni || []).every(lavTuttoCompleto);
-    const dirOk  = (m.materiali_diretti || []).every(d => d.quantita_fornita >= d.target);
+    const procOk = (m.lavorazioni || []).every(l => l.confermato);
+    const dirOk  = (m.materiali_diretti || []).every(d => d.confermato);
     const haQualcosa = (m.lavorazioni || []).length || (m.materiali_diretti || []).length;
     return haQualcosa && procOk && dirOk;
 }
-// Progresso commessa = unità fornite / unità totali su tutti i materiali (foglia)
+// Progresso commessa = target dei materiali CONFERMATI / target totale (solo confermati contano).
 function calcolaProgresso(albero) {
     let forn = 0, tot = 0;
-    const visitaLav = lav => {
-        (lav.rich_mat || []).forEach(r => { forn += Math.min(r.quantita_fornita, r.target); tot += r.target; });
-        (lav.figli || []).forEach(visitaLav);
-    };
+    const cont = r => { tot += r.target; if (r.confermato) forn += r.target; };
+    const visitaLav = lav => { (lav.rich_mat || []).forEach(cont); (lav.figli || []).forEach(visitaLav); };
     (albero.macchine || []).forEach(m => {
         (m.lavorazioni || []).forEach(visitaLav);
-        (m.materiali_diretti || []).forEach(r => { forn += Math.min(r.quantita_fornita, r.target); tot += r.target; });
+        (m.materiali_diretti || []).forEach(cont);
     });
     return tot > 0 ? Math.round(100 * forn / tot) : 0;
 }
@@ -1400,17 +1376,17 @@ async function caricaAlberoCommessa(idCommessa) {
     if (fill) { fill.style.width = pct + '%'; fill.classList.toggle('cpb-done', pct >= 100); }
     if (plab) plab.textContent = pct + '%';
 
-    // I materiali COMPLETI spariscono come nodo e compaiono come elenco puntato nel padre;
-    // restano nodi (trascinabili) solo i materiali ancora INCOMPLETI.
+    // I materiali CONFERMATI (trascinati sul padre) spariscono come nodo e compaiono come elenco
+    // puntato nel padre. Restano nodi: i materiali incompleti E quelli "pronti ma non confermati".
     const matArr = item => (item.tipo === 'lavorazione') ? (item.rich_mat || [])
                          : (item.tipo === 'macchina')   ? (item.materiali_diretti || []) : [];
-    const matIncompleti = item => matArr(item).filter(m => m.quantita_fornita < m.target);
-    const matCompleti   = item => matArr(item).filter(m => m.quantita_fornita >= m.target);
+    const matNodo       = item => matArr(item).filter(m => !m.confermato);   // restano nodi
+    const matConfermati = item => matArr(item).filter(m => m.confermato);    // elenco nel padre
     const bulletList = item => {
-        const c = matCompleti(item);
+        const c = matConfermati(item);
         if (!c.length) return '';
         // riga vuota prima dell'elenco e tra le voci, quantità ben distanziata
-        return '\n\n' + c.map(m => '•  ' + (m.codice ?? '-') + '    ×' + m.target).join('\n\n');
+        return '\n\n' + c.map(m => '✓  ' + (m.codice ?? '-') + '    ×' + m.target).join('\n\n');
     };
 
     // I materiali (a DESTRA) vengono prima dei sotto-processi, così stanno vicino al loro processo
@@ -1418,9 +1394,12 @@ async function caricaAlberoCommessa(idCommessa) {
         if (item.tipo === 'commessa')    return item.macchine || [];
         if (item.tipo === 'macchina') {
             if (item.collassata) return [];   // collassata: nessun figlio
-            return [...matIncompleti(item), ...(item.lavorazioni || [])];
+            return [...matNodo(item), ...(item.lavorazioni || [])];
         }
-        if (item.tipo === 'lavorazione') return [...matIncompleti(item), ...(item.figli || [])];
+        if (item.tipo === 'lavorazione') {
+            if (item.confermato) return [];   // processo confermato = collassato, figli nascosti
+            return [...matNodo(item), ...(item.figli || [])];
+        }
         return [];
     }
 
@@ -1448,6 +1427,9 @@ async function caricaAlberoCommessa(idCommessa) {
         const childCm = (item.tipo === 'macchina') ? item.commessa_macchina_id : cmId;
         let bg, border, fc, bw = 2, label;
 
+        let pronto = false;   // nodo "pronto da confermare" (verde chiaro tratteggiato)
+        const confermatiMat = it => matConfermati(it).map(m => ({ rm: m.rich_mat_id, codice: m.codice }));
+
         if (item.tipo === 'commessa') {
             bg = '#1c1c1c'; border = '#e5006d'; fc = '#fff';
             label = 'Commessa ' + (item.codice ?? '#' + item.id);
@@ -1458,38 +1440,56 @@ async function caricaAlberoCommessa(idCommessa) {
             if (collassata) {
                 bg = '#2e7d32'; border = '#1b5e20'; fc = '#fff';
                 label = '✓  ' + (item.codice ?? '-');
+            } else if (completa) {
+                bg = '#e3f2fd'; border = '#1565c0'; fc = '#0d47a1';   // pronta: trascinala sulla commessa
+                label = (item.codice ?? '-') + '  ×' + (item.quantita ?? 1) + '\n[PRONTA ▸ trascina sulla commessa]' + bulletList(item);
             } else {
                 bg = '#2b3550'; border = '#5e6b85'; fc = '#fff';
                 label = (item.codice ?? '-') + '  ×' + (item.quantita ?? 1) + '\n' + (item.descrizione ?? '').substring(0, 22) + bulletList(item);
             }
             _comNodeMeta[id] = { tipo: 'macchina', cm: childCm, collapsed: collassata, completa: completa,
-                                 macchinaId: item.id, codice: item.codice,
-                                 completi: matCompleti(item).map(m => ({ rm: m.rich_mat_id, codice: m.codice })) };
+                                 macchinaId: item.id, codice: item.codice, parentVis: parentId,
+                                 confermatiMat: confermatiMat(item) };
         } else if (item.tipo === 'lavorazione') {
-            if (item.bloccato)                    { bg = '#eceff1'; border = '#b0bec5'; fc = '#90a4ae'; }
-            else if (item.stato === 'COMPLETATA') { bg = '#e8f5e9'; border = '#43a047'; fc = '#1b5e20'; }
-            else if (item.stato === 'IN_CORSO')   { bg = '#fff8e1'; border = '#ffb300'; fc = '#8d6e00'; }
-            else                                  { bg = '#f5f5f5'; border = '#bdbdbd'; fc = '#616161'; }
-            label = (item.bloccato ? '🔒 ' : '') + (item.descrizione ?? 'Processo').substring(0, 26) +
-                    '\n[' + (item.bloccato ? 'BLOCCATO' : item.stato) + ']' + bulletList(item);
-            _comNodeMeta[id] = { tipo: 'lavorazione', cm: childCm, completi: matCompleti(item).map(m => ({ rm: m.rich_mat_id, codice: m.codice })) };
-        } else { // rich_mat — sola lettura: mostra quanto è stato preparato in scaffalatura
-            const completo = (item.quantita_fornita >= item.target);
-            if (completo) { bg = '#e8f5e9'; border = '#43a047'; fc = '#1b5e20'; }
-            else          { bg = '#ffffff'; border = '#c5b8f5'; fc = '#5e35b1'; }
+            const confermabile = lavConfermabile(item);
+            if (item.confermato) {                              // confermato = collassato, verde pieno
+                bg = '#2e7d32'; border = '#1b5e20'; fc = '#fff';
+                label = '✓  ' + (item.descrizione ?? 'Processo').substring(0, 24);
+            } else if (item.bloccato) { bg = '#eceff1'; border = '#b0bec5'; fc = '#90a4ae';
+                label = '🔒 ' + (item.descrizione ?? 'Processo').substring(0, 26) + '\n[BLOCCATO]' + bulletList(item);
+            } else if (confermabile) { bg = '#e3f2fd'; border = '#1565c0'; fc = '#0d47a1'; pronto = true;
+                label = (item.descrizione ?? 'Processo').substring(0, 26) + '\n[PRONTO ▸ trascina sul padre]' + bulletList(item);
+            } else if (lavInCorso(item)) { bg = '#fff8e1'; border = '#ffb300'; fc = '#8d6e00';
+                label = (item.descrizione ?? 'Processo').substring(0, 26) + '\n[IN CORSO]' + bulletList(item);
+            } else { bg = '#f5f5f5'; border = '#bdbdbd'; fc = '#616161';
+                label = (item.descrizione ?? 'Processo').substring(0, 26) + '\n[IN ATTESA]' + bulletList(item);
+            }
+            _comNodeMeta[id] = { tipo: 'lavorazione', cm: childCm, lavId: item.id, parentVis: parentId,
+                                 confermato: !!item.confermato, confermabile: confermabile,
+                                 confermatiMat: confermatiMat(item) };
+        } else { // rich_mat — restano a nodo solo gli incompleti e i "pronti" (completi non confermati)
+            const completo = rmCompleto(item);
+            if (completo) { bg = '#e3f2fd'; border = '#1565c0'; fc = '#0d47a1'; pronto = true;
+                label = (item.codice ?? '-') + '\n' + item.quantita_fornita + '/' + item.target + ' ▸ trascina';
+            } else { bg = '#ffffff'; border = '#c5b8f5'; fc = '#5e35b1';
+                label = (item.codice ?? '-') + '\n' + item.quantita_fornita + '/' + item.target;
+            }
             bw = 1;
-            label = (item.codice ?? '-') + '\n' + item.quantita_fornita + '/' + item.target + (completo ? ' ✓' : '');
-            _comNodeMeta[id] = { tipo: 'rich_mat', cm: childCm, fornito: item.quantita_fornita };
+            _comNodeMeta[id] = { tipo: 'rich_mat', cm: childCm, rmId: item.rich_mat_id,
+                                 completo: completo, parentVis: parentId };
         }
 
-        // macchina collassata = riquadro squadrato e compatto
-        const squared = (item.tipo === 'macchina' && item.collassata);
+        // riquadro squadrato e compatto per gli elementi "riposti" (collassati/confermati)
+        const squared = (item.tipo === 'macchina' && item.collassata) ||
+                        (item.tipo === 'lavorazione' && item.confermato);
         nodes.push(Object.assign({
             id, label, shape: 'box', x: item._px, y: item._py,
             color: { background: bg, border, highlight: { background: bg, border: '#e5006d' }, hover: { background: bg, border } },
             font: { color: fc, size: 12, face: 'Poppins, sans-serif', multi: false },
-            borderWidth: bw, borderWidthSelected: bw + 1
-        }, squared ? { shapeProperties: { borderRadius: 2 }, widthConstraint: { minimum: 72, maximum: 130 }, font: { color: fc, size: 12, face: 'Poppins, sans-serif', bold: true } } : {}));
+            borderWidth: pronto ? 2 : bw, borderWidthSelected: (pronto ? 2 : bw) + 1
+        },
+        pronto  ? { shapeProperties: { borderDashes: [6, 4] } } : {},
+        squared ? { shapeProperties: { borderRadius: 2 }, widthConstraint: { minimum: 72, maximum: 130 }, font: { color: fc, size: 12, face: 'Poppins, sans-serif', bold: true } } : {}));
         // freccia invertita: punta dal figlio (destra) verso il padre (sinistra), cioè verso il prodotto finale
         if (parentId !== null) edges.push({ from: id, to: parentId });
         getChildren(item).forEach(c => addNodo(c, id, childCm));
@@ -1526,9 +1526,10 @@ async function caricaAlberoCommessa(idCommessa) {
     legend.innerHTML =
         '<span class="dot dot-attesa"></span>In attesa' +
         '<span class="dot dot-corso"></span>In corso' +
-        '<span class="dot dot-done"></span>Completato' +
+        '<span class="dot dot-pronto"></span>Pronto (trascina sul padre)' +
+        '<span class="dot dot-done"></span>Confermato' +
         '<span class="dot dot-lock"></span>Bloccato' +
-        '<span class="bom-legend-hint"><i class="fa-solid fa-dolly"></i> i materiali si caricano dalla Scaffalatura</span>';
+        '<span class="bom-legend-hint"><i class="fa-solid fa-hand-pointer"></i> trascina un elemento PRONTO sul suo padre per confermare l\'avanzamento</span>';
     container.appendChild(legend);
 
     // Pulsante ricentra
@@ -1539,49 +1540,61 @@ async function caricaAlberoCommessa(idCommessa) {
     fitBtn.addEventListener('click', () => { if (_visCommessa) _visCommessa.fit({ animation: true }); });
     container.appendChild(fitBtn);
 
-    // DRAG&DROP (solo macchine):
-    //  - i MATERIALI sono di sola lettura (si caricano dalla Scaffalatura, non dal magazzino)
-    //  - una MACCHINA completata trascinata sulla commessa viene "riposta" (collassata)
+    // DRAG&DROP = CONFERMA MANUALE DELL'AVANZAMENTO:
+    //  - un MATERIALE "pronto" (completo in scaffalatura) trascinato sul suo padre → confermato
+    //  - un PROCESSO "pronto" (tutti i figli confermati) trascinato sul suo padre → confermato
+    //  - una MACCHINA completa trascinata sulla commessa → riposta (collassata)
+    // Solo gli elementi confermati contano nel progresso. Niente snap = il nodo torna al suo posto.
     _visCommessa.on('dragEnd', params => {
         if (!params.nodes.length) return;
-        const dragged = params.nodes[0];
-        const meta = _comNodeMeta[dragged];
+        const meta = _comNodeMeta[params.nodes[0]];
         if (!meta) return;
-
-        if (meta.tipo === 'rich_mat' || meta.tipo === 'lavorazione') {
-            caricaAlberoCommessa(_commessaCorrente);   // nodi non interattivi: ripristina posizione
-            return;
-        }
+        const snap = () => caricaAlberoCommessa(_commessaCorrente);
 
         const cpos = _visCommessa.DOMtoCanvas(params.pointer.DOM);
         const PAD = 30;
         const dentro = (visId, pad = PAD) => {
+            if (visId == null) return false;
             try {
-                const bb = _visCommessa.getBoundingBox(visId);
+                const bb = _visCommessa.getBoundingBox(Number(visId));
                 return bb && cpos.x >= bb.left - pad && cpos.x <= bb.right + pad
                           && cpos.y >= bb.top - pad && cpos.y <= bb.bottom + pad;
             } catch (e) { return false; }
         };
 
-        if (meta.tipo === 'macchina' && meta.completa && !meta.collapsed) {
+        if (meta.tipo === 'rich_mat') {
+            if (meta.completo && dentro(meta.parentVis)) confermaAvanzamento(meta.cm, 'rich_mat', meta.rmId);
+            else snap();
+        } else if (meta.tipo === 'lavorazione') {
+            if (meta.confermabile && dentro(meta.parentVis)) confermaAvanzamento(meta.cm, 'lavorazione', meta.lavId);
+            else snap();
+        } else if (meta.tipo === 'macchina') {
             const comVis = Object.keys(_comNodeMeta).find(k => _comNodeMeta[k].tipo === 'commessa');
-            if (comVis != null && dentro(Number(comVis))) collassaMacchina(meta.cm, true);   // persistente + ricarica
-            else caricaAlberoCommessa(_commessaCorrente);                                     // snap-back
-        }
+            if (meta.completa && !meta.collapsed && dentro(comVis)) collassaMacchina(meta.cm, true);
+            else snap();
+        } else snap();
     });
 
-    // CLICK: una macchina collassata mostra il menu (storico / riapri). I materiali non sono interattivi.
+    // CLICK = menu contestuale per ANNULLARE una conferma (se si è sbagliato) o gestire la macchina.
     _visCommessa.on('click', params => {
         chiudiComMenu();
         if (!params.nodes.length) return;
         const meta = _comNodeMeta[params.nodes[0]];
         if (!meta) return;
+        const items = [];
+
         if (meta.tipo === 'macchina' && meta.collapsed) {
-            mostraComMenu([
-                { label: 'Storico lavorazioni', icon: 'fa-eye', action: () => apriStoricoMacchina(meta.macchinaId, meta.codice) },
-                { label: 'Riapri macchina', icon: 'fa-up-right-and-down-left-from-center', action: () => collassaMacchina(meta.cm, false) }
-            ], params.pointer.DOM);
+            items.push({ label: 'Storico lavorazioni', icon: 'fa-eye', action: () => apriStoricoMacchina(meta.macchinaId, meta.codice) });
+            items.push({ label: 'Riapri macchina', icon: 'fa-up-right-and-down-left-from-center', action: () => collassaMacchina(meta.cm, false) });
+        } else if (meta.tipo === 'lavorazione' && meta.confermato) {
+            items.push({ label: 'Annulla conferma processo', icon: 'fa-rotate-left', action: () => annullaAvanzamento(meta.cm, 'lavorazione', meta.lavId) });
+        } else {
+            // su un padre non collassato: annulla la conferma dei suoi materiali (i pallini ✓)
+            (meta.confermatiMat || []).forEach(m =>
+                items.push({ label: 'Annulla materiale: ' + (m.codice ?? '-'), icon: 'fa-rotate-left',
+                             action: () => annullaAvanzamento(meta.cm, 'rich_mat', m.rm) }));
         }
+        if (items.length) mostraComMenu(items, params.pointer.DOM);
     });
 
     setTimeout(() => { if (_visCommessa) { _visCommessa.redraw(); _visCommessa.fit(); } }, 250);

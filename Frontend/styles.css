@@ -2869,33 +2869,46 @@ div.vis-network div.vis-navigation div.vis-button:active {
 .giac-count { margin-right: auto; font-size: 13px; font-weight: 700; color: #8d6e00; }
 
 /* Combobox con ricerca (autocomplete) */
+/* Combobox con ricerca — stile coerente con la ricerca della scaffalatura
+   (barra + elenco bianco arrotondato con ombra, hover rosa, codice in rosa). */
 .ac-wrap { position: relative; flex: 1; min-width: 0; }
 .ac-input { width: 100%; }
 .ac-input.ac-scelto { border-color: var(--primary-pink); font-weight: 600; }
 .ac-list {
     position: fixed;
     z-index: 4000;
-    max-height: 240px;
+    max-height: 300px;
     overflow-y: auto;
     background: #fff;
-    border: 1px solid var(--clr-border);
-    border-radius: 10px;
-    box-shadow: 0 10px 28px rgba(0,0,0,0.16);
-    padding: 5px;
+    border: 1px solid #e0e0e0;
+    border-radius: 14px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    padding: 0;
+    overflow-x: hidden;
 }
 .ac-item {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: 7px;
-    font-size: 13px;
-    color: #1c1c1c;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f5f5f5;
     cursor: pointer;
+    transition: background 0.12s;
 }
-.ac-item:hover { background: #f3f4f7; }
+.ac-item:last-child { border-bottom: none; }
+.ac-item:hover { background: #fdf0f7; }
+.ac-cod {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--primary-pink);
+    font-family: var(--ff-display);
+}
+.ac-desc { font-size: 13px; color: #777; }
+.ac-lab  { font-size: 14px; color: #333; font-weight: 500; }
 .ac-tag {
+    align-self: flex-start;
+    margin-top: 3px;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
@@ -2903,12 +2916,11 @@ div.vis-network div.vis-navigation div.vis-button:active {
     border-radius: 50px;
     padding: 2px 8px;
     white-space: nowrap;
-    flex-shrink: 0;
     border: 1px solid;
 }
 .ac-tag-materia-prima { color: #8d6e00; background: #fff3d6; border-color: #ffd980; }
 .ac-tag-semilavorato  { color: #5e35b1; background: #ede7fb; border-color: #c5b8f5; }
-.ac-empty { padding: 10px; font-size: 13px; color: #aaa; text-align: center; }
+.ac-empty { padding: 20px 16px; font-size: 14px; color: #bbb; text-align: center; }
 
 /* Modale storico lavorazioni (macchina collassata) */
 .modal-storico { width: 580px; max-width: 92vw; }
@@ -3096,7 +3108,8 @@ div.vis-network div.vis-navigation div.vis-button:active {
 .bom-legend .dot:first-child { margin-left: 0; }
 .dot-attesa { background: #f5f5f5; border-color: #bdbdbd; }
 .dot-corso  { background: #fff8e1; border-color: #ffb300; }
-.dot-done   { background: #e8f5e9; border-color: #43a047; }
+.dot-pronto { background: #e3f2fd; border: 2px dashed #1565c0; }
+.dot-done   { background: #2e7d32; border-color: #1b5e20; }
 .dot-lock   { background: #eceff1; border-color: #b0bec5; }
 .bom-legend-hint {
     margin-left: 10px;
@@ -3292,6 +3305,66 @@ div.vis-network div.vis-navigation div.vis-button:active {
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .fb-change-comm:hover { background: #ffe0ec; color: var(--primary-pink); border-color: #f5b8d0; }
+
+/* Pulsante "Svuota cella" nella toolbar del pannello */
+.fb-clear-cell {
+    background: none;
+    border: 1.5px solid #f0c2c2;
+    border-radius: 10px;
+    padding: 9px 16px;
+    font-size: 15px;
+    color: #c0392b;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.fb-clear-cell:hover { background: #fdeaea; border-color: #e3a3a3; }
+
+/* Step di assegnazione della commessa dentro il pannello della cella */
+.fb-assign { padding: 18px 20px 8px; max-width: 640px; margin: 0 auto; }
+.fb-assign-label {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2b3550;
+    margin: 0 0 16px;
+    display: flex; align-items: center; gap: 10px;
+}
+.fb-assign-label i { color: var(--primary-pink); }
+.fb-assign-mount { margin-bottom: 18px; }
+.fb-assign-mount .ac-input {
+    font-size: 17px;
+    padding: 13px 16px;
+    border-radius: 12px;
+}
+.fb-assign-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.fb-assign-save {
+    background: var(--primary-pink);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 13px 24px;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 9px;
+    transition: filter 0.15s;
+}
+.fb-assign-save:hover { filter: brightness(1.06); }
+.fb-assign-cancel {
+    background: none;
+    border: 1.5px solid var(--clr-border);
+    border-radius: 12px;
+    padding: 13px 22px;
+    font-size: 17px;
+    color: #666;
+    cursor: pointer;
+}
+.fb-assign-cancel:hover { background: #f3f3f5; }
+.fb-assign-hint {
+    margin: 16px 0 0;
+    font-size: 14px;
+    color: #999;
+    display: flex; align-items: center; gap: 8px;
+}
 
 /* Blocco macchina */
 .fb-macchina {

@@ -46,31 +46,35 @@
         const password = document.getElementById("password").value;
         const messaggioEl = document.getElementById("messaggio");
 
+        // Stesso host della pagina (localhost o 127.0.0.1): evita il mismatch di origine
+        const API = 'http://' + location.hostname + ':5001';
+
         try {
-            const res = await fetch('http://localhost:5001/login', {
+            const res = await fetch(API + '/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
             });
 
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
 
             if (res.ok && data.token) {
                 localStorage.setItem('token', data.token);
                 messaggioEl.style.color = "lightgreen";
-                messaggioEl.textContent = "Login effettuato! Reindirizzamento...";
-                setTimeout(() => {
-                    window.location.href = "index.html";
-                }, 1500);
+                messaggioEl.textContent = "Login effettuato!";
+                // Redirect immediato: niente attesa che fa sembrare il login bloccato
+                window.location.href = "index.html";
             } else {
                 messaggioEl.style.color = "#ff1a8c";
                 messaggioEl.textContent = data.errore ?? "Credenziali sbagliate";
             }
 
         } catch (err) {
+            // La fetch ha lanciato: server spento OPPURE risposta bloccata dal browser
+            // (es. Brave Shields verso localhost). Non sono le credenziali.
             messaggioEl.style.color = "#ff1a8c";
-            messaggioEl.textContent = "Errore di connessione al server.";
-            console.error(err);
+            messaggioEl.textContent = "Connessione all'API bloccata: verifica che il server sia attivo e disattiva gli Shields/blocco del browser per questo sito.";
+            console.error('Login fetch fallita (possibile blocco del browser verso localhost):', err);
         }
     });
     </script>

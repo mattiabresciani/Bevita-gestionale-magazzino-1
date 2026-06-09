@@ -228,19 +228,32 @@ Il sistema distingue nettamente due livelli, come due gruppi di tabelle:
     <li><strong>Preparazione in Scaffalatura</strong> — ogni cella dello scaffale rappresenta una
     commessa; il magazziniere carica le quantità di materiale necessarie prendendole dal magazzino
     (la giacenza scende). È l'unico momento in cui si tocca il magazzino.</li>
-    <li><strong>Produzione</strong> — il grafo di completamento della commessa mostra l'avanzamento:
-    quanto è stato preparato rispetto al necessario. Quando tutti i materiali di una macchina sono
-    pronti, la macchina diventa <strong>"Pronta per produzione"</strong>.</li>
+    <li><strong>Produzione</strong> — il grafo di completamento della commessa mostra l'avanzamento.
+    Un materiale completo in scaffalatura appare come nodo <strong>"pronto"</strong> (verde tratteggiato).</li>
+    <li><strong>Conferma manuale (trascinamento)</strong> — l'avanzamento <strong>non</strong> scatta da solo:
+    l'utente <strong>trascina l'etichetta dell'elemento pronto sul suo padre</strong> per confermarlo. Solo allora
+    conta nel progresso. La conferma è <strong>a cascata</strong>: prima i materiali nel loro processo, poi il
+    processo (con tutti i materiali confermati) sul suo padre, poi la sottolavorazione, infine la macchina sulla
+    commessa. Un click su un elemento confermato permette di <strong>annullare</strong> la conferma se si è sbagliato.</li>
 </ol>
 
-<div class="box">
-    <h3>Avanzamento "calcolato", non memorizzato a mano</h3>
+<div class="box key">
+    <h3>Avanzamento confermato a mano: solo ciò che si trascina conta</h3>
     <p style="margin:4px 0">
-    Lo stato di una lavorazione/macchina <strong>non</strong> è un campo da aggiornare manualmente:
-    è <strong>derivato</strong> dai materiali preparati. Per ogni richiesta, il fabbisogno è
-    <code>quantità della ricetta × numero di macchine in commessa</code>; confrontandolo con quanto è
-    stato preparato si ottiene lo stato (in attesa / in corso / completato) e la percentuale di
-    avanzamento della commessa.
+    La preparazione in scaffalatura rende un materiale <strong>"pronto"</strong>, ma <strong>non</strong> fa avanzare
+    da sola la percentuale della commessa. L'avanzamento progredisce <strong>solo</strong> quando l'utente trascina
+    l'elemento pronto sul padre nel grafo: quel gesto scrive una riga in <code>avanzamenti_confermati</code>, e la barra
+    di progresso conta <strong>esclusivamente</strong> gli elementi confermati. Annullare una conferma non restituisce
+    nulla al magazzino: i materiali preparati in <code>fornitura_materiali</code> restano invariati.
+    </p>
+</div>
+
+<div class="box">
+    <h3>Fabbisogno di ogni richiesta</h3>
+    <p style="margin:4px 0">
+    Per ogni richiesta di materiale il fabbisogno è
+    <code>quantità della ricetta × numero di macchine in commessa</code>; confrontandolo con quanto è stato preparato
+    in scaffalatura si capisce se l'elemento è completo (e quindi "pronto" da confermare).
     </p>
 </div>
 
@@ -383,6 +396,31 @@ chiave esterna (collegamento ad un'altra tabella).
     </table>
 </div>
 
+<!-- AVANZAMENTI_CONFERMATI -->
+<div class="tbl">
+    <span class="name">avanzamenti_confermati</span><span class="role produzione">Produzione / Avanzamento</span>
+    <p>Registra le <strong>conferme manuali</strong> di avanzamento nel grafo di commessa. Un materiale o un processo, anche se completo in scaffalatura, <strong>non conta nel progresso</strong> finché l'utente non lo <strong>trascina sul padre</strong> nel grafo: quel gesto crea una riga qui. Il progresso della commessa è calcolato <strong>solo</strong> sugli elementi presenti in questa tabella. Annullare una conferma elimina la riga ma <strong>non</strong> tocca <code>fornitura_materiali</code> (i materiali preparati restano).</p>
+    <table class="cols">
+        <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+        <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo della conferma.</td></tr>
+        <tr><td class="col-name fk">id_commessa_macchina</td><td class="col-type">int → commessa_macchine</td><td>Unità-in-commessa a cui si riferisce l'avanzamento.</td></tr>
+        <tr><td class="col-name">tipo</td><td class="col-type">enum</td><td><code>rich_mat</code> (un materiale) oppure <code>lavorazione</code> (un processo/sottolavorazione).</td></tr>
+        <tr><td class="col-name">ref_id</td><td class="col-type">int</td><td>Id dell'elemento confermato (una <code>rich_mat</code> o una <code>lavorazione</code> secondo <code>tipo</code>).</td></tr>
+    </table>
+    <p class="small">Unicità su (id_commessa_macchina, tipo, ref_id): conferma idempotente. La conferma a livello di macchina usa il flag <code>collassata</code> su <code>commessa_macchine</code>.</p>
+</div>
+
+<!-- SCAFFALE_CELLE -->
+<div class="tbl">
+    <span class="name">scaffale_celle</span><span class="role produzione">Produzione / Scaffalatura</span>
+    <p>Memorizza <strong>quale commessa è preparata in ogni cella fisica</strong> dello scaffale (es. la cella <code>A1</code> → commessa COM-2025-001). Prima questa associazione viveva solo nel browser (localStorage); ora è sul database, così lo scaffale è <strong>identico da qualsiasi browser o PC</strong> e non si perde più. I materiali della cella non sono duplicati qui: discendono dalla commessa (via <code>fornitura_materiali</code>), basta sapere quale commessa contiene la cella.</p>
+    <table class="cols">
+        <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+        <tr><td class="col-name pk">cella</td><td class="col-type">varchar</td><td>Identificativo della cella fisica (riga+colonna, es. <code>A1</code>, <code>D8</code>). È la chiave primaria.</td></tr>
+        <tr><td class="col-name fk">id_commessa</td><td class="col-type">int → commesse</td><td>Commessa attualmente preparata in quella cella.</td></tr>
+    </table>
+</div>
+
 <!-- SEMILAVORATI -->
 <div class="tbl">
     <span class="name">semilavorati</span><span class="role catalogo">Catalogo</span>
@@ -429,21 +467,21 @@ chiave esterna (collegamento ad un'altra tabella).
 </div>
 
 <h2>5 · Mappa delle relazioni</h2>
-<div class="er"><span class="t">clienti</span> 1──N <span class="t">commesse</span> 1──N <span class="t">commessa_macchine</span> N──1 <span class="t">macchine</span>
-                                                  │                                  │
-                                                  │ (preparazione)                   │ (catalogo: struttura)
-                                                  ▼                                  ▼
-                                        <span class="t">fornitura_materiali</span> N──1 <span class="t">rich_mat</span> N──1 <span class="t">materialeMagazzino</span>
-                                                                         ▲
-                                                                         │ (sotto un processo)
-                                          <span class="t">processi_tipo</span> 1──N <span class="t">lavorazioni</span> ──┘
-                                                  ▲                       │ (auto: sequenza tav_padre)
-                                                  │                       ▼
-                                          <span class="t">semilavorati</span> 1──N <span class="t">semilavorato_componenti</span> ──▶ materie prime / altri semilavorati
+<div class="er"><span class="t">scaffale_celle</span> N──1 <span class="t">commesse</span> 1──N <span class="t">commessa_macchine</span> N──1 <span class="t">macchine</span>
+   (cella → commessa)                 │             │     │
+                                      │ (prepar.)   │     │ (catalogo: struttura)
+<span class="t">clienti</span> 1──N <span class="t">commesse</span>                ▼   1─┤N <span class="t">avanzamenti_confermati</span>   ▼
+                                  <span class="t">fornitura_materiali</span>  (conferme manuali → progresso)   <span class="t">rich_mat</span> N──1 <span class="t">materialeMagazzino</span>
+                                            │ N──1 <span class="t">rich_mat</span>                          ▲
+                                            ▼                                        │ (sotto un processo)
+                                     <span class="t">processi_tipo</span> 1──N <span class="t">lavorazioni</span> ────────────────┘
+                                             ▲                       │ (auto: sequenza tav_padre)
+                                             │                       ▼
+                                     <span class="t">semilavorati</span> 1──N <span class="t">semilavorato_componenti</span> ──▶ materie prime / altri semilavorati
 
 <span class="c">Catalogo</span> = macchine · processi_tipo · semilavorati · semilavorato_componenti · materialeMagazzino · rich_mat (ricetta)
-<span class="c">Produzione</span> = commesse · commessa_macchine
-<span class="c">Avanzamento</span> = fornitura_materiali  (scritta SOLO dalla scaffalatura → scala il magazzino)</div>
+<span class="c">Produzione</span> = commesse · commessa_macchine · scaffale_celle (cella → commessa)
+<span class="c">Avanzamento</span> = fornitura_materiali (preparazione, scala il magazzino) · avanzamenti_confermati (conferme manuali = progresso)</div>
 
 <footer class="small">
 Documento generato per il progetto FSL-PCTO Bevita Srl. Le tabelle descritte sono quelle effettivamente
