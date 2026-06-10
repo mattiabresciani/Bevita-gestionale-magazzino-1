@@ -139,8 +139,9 @@
         </div>
     </main>
 
+    <script src="config.js"></script>
     <script>
-        const API = 'http://localhost:5001';
+        const API = window.BACKEND_URL;
         const token = localStorage.getItem('token');
 
         // Auth guard — solo admin
@@ -159,7 +160,7 @@
             };
             if (body) opts.body = JSON.stringify(body);
             return fetch(API + path, opts).then(r => {
-                if (r.status === 401) { localStorage.clear(); window.location.href = 'login.html'; }
+                if (r.status === 401) { localStorage.removeItem('token'); window.location.href = 'login.html'; }
                 return r;
             });
         }

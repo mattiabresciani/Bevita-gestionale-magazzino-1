@@ -193,29 +193,35 @@
                 <span class="home-card-desc">Registra dipendenti e gestisci gli accessi</span>
             </a>
 
+            <a href="documentazione.html" class="home-card-btn" id="docCard" style="display:none;">
+                <i class="fa-solid fa-book"></i>
+                <span class="home-card-label">Documentazione Software</span>
+                <span class="home-card-desc">Intenzioni, logica e struttura del database del gestionale</span>
+            </a>
+            <!--
             <a href="magazzino.html" class="home-card-btn">
                 <i class="fa-solid fa-dumpster-fire"></i>
                 <span class="home-card-label">Futura aggiunta</span>
                 <span class="home-card-desc">Calcolatore margini, visualizzatore scaffalature e probabile aggancio al lavoro dell'anno scorso</span>
             </a>
-
+            -->
         </div>
 
     </main>
 
+    <script src="config.js"></script>
     <script>
         if (!localStorage.getItem('token')) window.location.href = 'login.html';
     </script>
     <script src="framework.js"></script>
     <script>
-        fetch('http://localhost:5001/logininfo', {
-            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
-        })
-        .then(r => r.json())
+        infoUtente()
         .then(data => {
+            if (!data) return;   // non autenticato / token scaduto: già reindirizzato
             if (data.ruolo === 'admin') {
                 document.getElementById('username').textContent = 'Admin';
                 document.getElementById('adminCard').style.display = '';
+                document.getElementById('docCard').style.display = '';
             } else {
                 document.getElementById('username').textContent = data.nome || data.username || '';
             }

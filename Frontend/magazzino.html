@@ -74,7 +74,10 @@
         <div class="machine-panel">
             <div class="machine-panel-header">
                 <h2 id="commessaPanelTitle">Commessa</h2>
-                <button class="machine-panel-close" id="commessaPanelClose"><i class="fa-solid fa-xmark"></i></button>
+                <div class="machine-panel-header-actions">
+                    <button class="goto-btn" id="commessaToScaffale" title="Apri questa commessa nella scaffalatura"><i class="fa-solid fa-dolly"></i> Scaffalatura</button>
+                    <button class="machine-panel-close" id="commessaPanelClose"><i class="fa-solid fa-xmark"></i></button>
+                </div>
             </div>
             <div class="commessa-progress" id="commessaProgress">
                 <div class="cpb-track"><div class="cpb-fill" id="commessaProgressFill"></div></div>
@@ -119,7 +122,7 @@
             <button class="pill-btn" data-target="semilavorati">Semilavorati</button>
             <button class="pill-btn" data-target="materie-prime">Materie Prime</button>
         </div>
-
+ 
         <div class="action-row">
             <button class="add-btn" id="addBtn">Aggiungi</button>
         </div>
@@ -129,6 +132,7 @@
         </div>
     </main>
 
+    <script src="config.js"></script>
     <script src="script.js"></script>
     <script>
         caricaSezione('commesse');

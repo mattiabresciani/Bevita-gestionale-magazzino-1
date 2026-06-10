@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentazione Software — Bevita</title>
+    <link rel="icon" href="img/faviconBevita.png">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Tutto scoperto sotto .docsw per non interferire con lo stile dell'app */
+        .docsw {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 28px 22px 60px;
+            color: #1f2430;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+        .docsw h1, .docsw h2, .docsw h3 { color: #0f1320; line-height: 1.2; }
+        .docsw h1 { font-size: 30px; margin: 0 0 6px; }
+        .docsw h2 {
+            font-size: 22px;
+            margin: 34px 0 14px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e5006d;
+        }
+        .docsw h3 { font-size: 17px; margin: 18px 0 8px; color: #b00057; }
+        .docsw p { margin: 9px 0; }
+        .docsw .lead { font-size: 16px; color: #444; }
+        .docsw .pink { color: #e5006d; }
+        .docsw code, .docsw .mono {
+            font-family: "SF Mono", "Consolas", monospace;
+            background: #f4f0f5;
+            border-radius: 5px;
+            padding: 2px 7px;
+            font-size: 0.9em;
+            color: #8a0050;
+        }
+        .docsw .cover {
+            border: 2px solid #e5006d;
+            border-radius: 16px;
+            padding: 30px 32px;
+            background: linear-gradient(180deg, #fff5fa, #ffffff);
+        }
+        .docsw .cover .sub { color: #555; font-size: 16px; margin-top: 3px; }
+        .docsw .cover .meta { margin-top: 16px; font-size: 13px; color: #777; }
+        .docsw .tagline {
+            display: inline-block;
+            margin-top: 12px;
+            background: #e5006d;
+            color: #fff;
+            font-weight: 700;
+            font-size: 13px;
+            padding: 6px 14px;
+            border-radius: 50px;
+        }
+        .docsw .box {
+            border: 1px solid #ead7e3;
+            background: #fdf7fb;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin: 16px 0;
+        }
+        .docsw .box.key { border-color: #f0b9d4; background: #fff0f7; }
+        .docsw .box h3 { margin-top: 0; }
+        .docsw ul { margin: 8px 0; padding-left: 24px; }
+        .docsw li { margin: 5px 0; }
+        .docsw table.cols {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 6px;
+            font-size: 13.5px;
+        }
+        .docsw table.cols th {
+            background: #2b2f3a;
+            color: #fff;
+            text-align: left;
+            padding: 9px 12px;
+            font-weight: 600;
+        }
+        .docsw table.cols td {
+            border-bottom: 1px solid #ececf0;
+            padding: 8px 12px;
+            vertical-align: top;
+        }
+        .docsw table.cols tr:nth-child(even) td { background: #faf9fb; }
+        .docsw .col-name { font-family: "SF Mono", monospace; color: #8a0050; font-weight: 600; white-space: nowrap; }
+        .docsw .col-type { color: #6b7280; white-space: nowrap; font-size: 12.5px; }
+        .docsw .pk { font-weight: 700; }
+        .docsw .fk { color: #0a7d3c; font-weight: 600; }
+        .docsw .tbl {
+            border: 1px solid #e6e6ec;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin: 18px 0;
+        }
+        .docsw .tbl .name {
+            font-family: "SF Mono", monospace;
+            font-size: 18px;
+            font-weight: 700;
+            color: #0f1320;
+        }
+        .docsw .tbl .role {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #fff;
+            background: #7a8194;
+            padding: 3px 10px;
+            border-radius: 50px;
+            margin-left: 10px;
+            vertical-align: 2px;
+        }
+        .docsw .role.catalogo { background: #5b8def; }
+        .docsw .role.produzione { background: #e5006d; }
+        .docsw .role.magazzino { background: #f2960b; }
+        .docsw .role.sistema { background: #6b7280; }
+        .docsw ol.flow { counter-reset: step; margin: 14px 0; padding: 0; list-style: none; }
+        .docsw ol.flow li {
+            position: relative;
+            padding: 10px 10px 10px 44px;
+            border-left: 2px solid #f0b9d4;
+            margin-left: 14px;
+        }
+        .docsw ol.flow li::before {
+            counter-increment: step;
+            content: counter(step);
+            position: absolute;
+            left: -15px; top: 9px;
+            width: 28px; height: 28px;
+            background: #e5006d; color: #fff;
+            border-radius: 50%;
+            text-align: center; line-height: 28px;
+            font-weight: 700; font-size: 14px;
+        }
+        .docsw .small { font-size: 13px; color: #777; }
+        .docsw .er {
+            font-family: "SF Mono", monospace;
+            font-size: 12.5px;
+            line-height: 1.6;
+            background: #1f2430;
+            color: #e7e9ee;
+            border-radius: 12px;
+            padding: 18px 20px;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        .docsw .er .t { color: #ff8ac2; }
+        .docsw .er .c { color: #9ad1ff; }
+        .docsw footer { margin-top: 30px; border-top: 1px solid #e6e6ec; padding-top: 12px; }
+        .docsw .pdf-link {
+            display: inline-flex; align-items: center; gap: 8px;
+            margin-top: 16px;
+            background: #fff; border: 1.5px solid #f5b8d0; color: #e5006d;
+            border-radius: 10px; padding: 10px 18px; font-size: 15px; font-weight: 700;
+            text-decoration: none;
+        }
+        .docsw .pdf-link:hover { background: #e5006d; color: #fff; }
+    </style>
+</head>
+<body>
+
+    <header id="main-header" class="main-header"></header>
+
+    <main class="docsw">
+
+        <div class="cover">
+            <h1>Bevita Srl — Sistema di preparazione materiali per commessa</h1>
+            <div class="sub">Documentazione: intenzioni, logica di funzionamento e struttura del database</div>
+            <div class="tagline">Progetto FSL-PCTO — Bresciani M. &amp; Bertezzolo D.</div>
+            <div class="meta">Stack: backend Flask (Python) + MySQL · frontend HTML/CSS/JavaScript · grafo vis.js · autenticazione JWT</div>
+            <a class="pdf-link" href="../docs/Documentazione_DB_Bevita.pdf" target="_blank"><i class="fa-regular fa-file-pdf"></i> Apri la versione PDF</a>
+        </div>
+
+        <h2>1 · A cosa serve il software (intenzioni)</h2>
+        <p class="lead">
+        Il committente produce macchine industriali su <strong>commessa</strong>. Servono due cose:
+        gestire <strong>l'avanzamento</strong> della produzione di una commessa e gestire le
+        <strong>richieste di materiale</strong> in relazione alle scorte di <strong>magazzino</strong>.
+        </p>
+        <p>
+        L'idea guida è quella dei <strong>"mattoncini Lego"</strong>: per costruire una macchina servono
+        certi pezzi (materie prime e semilavorati). Prima si definisce <em>cosa serve</em> (la "ricetta" della
+        macchina), poi il <strong>magazziniere</strong> prende fisicamente i pezzi dal magazzino e li
+        <strong>prepara</strong> per quella commessa; chi produce trova i materiali pronti e porta avanti il lavoro.
+        </p>
+
+        <div class="box key">
+            <h3>Regola fondamentale (separazione magazzino ↔ commessa)</h3>
+            <p style="margin:4px 0">
+            Il <strong>magazzino</strong> (giacenze fisiche) viene scalato <strong>solo</strong> dalla
+            <strong>Scaffalatura</strong>, quando il magazziniere prepara i materiali per una commessa.
+            La vista di produzione della commessa è di <strong>sola lettura</strong> sui materiali: mostra solo
+            ciò che è stato preparato, e <strong>non</strong> attinge dal magazzino. Se un materiale non è stato
+            caricato in scaffalatura, la macchina <strong>non può completarsi</strong> usando il residuo di magazzino.
+            </p>
+        </div>
+
+        <h2>2 · Modello logico: dal "catalogo" alla "produzione"</h2>
+        <p>Il sistema distingue nettamente due livelli, come due gruppi di tabelle:</p>
+        <ul>
+            <li><strong>Catalogo (i modelli riutilizzabili):</strong> com'è fatta una macchina, quali processi
+            esistono, quali semilavorati, e l'elenco delle materie prime in magazzino. Definito una volta e
+            riusato in tante commesse.</li>
+            <li><strong>Produzione (le unità reali per una commessa):</strong> quali macchine servono in una
+            commessa, in che quantità, e — soprattutto — <strong>quanto materiale è già stato preparato</strong>
+            per ciascuna.</li>
+        </ul>
+
+        <div class="box">
+            <h3>I tre pilastri della "ricetta"</h3>
+            <ul>
+                <li><span class="pink"><strong>Lavorazioni</strong></span> = i passi di costruzione di una
+                macchina (es. taglio → saldatura → assemblaggio), in <strong>sequenza</strong>.</li>
+                <li><span class="pink"><strong>Materie prime</strong></span> = i pezzi grezzi consumati, presi
+                dal magazzino.</li>
+                <li><span class="pink"><strong>Semilavorati</strong></span> = pezzi prodotti internamente
+                (una lavorazione applicata a dei componenti); non hanno giacenza propria, si producono dai loro
+                componenti. Possono contenere altri semilavorati (più livelli).</li>
+            </ul>
+        </div>
+
+        <h2>3 · Il flusso operativo, passo per passo</h2>
+        <ol class="flow">
+            <li><strong>Catalogo macchina</strong> — si definisce com'è fatta una macchina: i suoi processi
+            (in sequenza) e, per ognuno, le materie prime/semilavorati necessari. È la "ricetta" del modello.</li>
+            <li><strong>Commessa</strong> — si crea la commessa (per un cliente) e si indicano <em>quali</em>
+            macchine del catalogo servono e in <em>quante</em> unità.</li>
+            <li><strong>Preparazione in Scaffalatura</strong> — ogni cella dello scaffale rappresenta una
+            commessa; il magazziniere carica le quantità di materiale necessarie prendendole dal magazzino
+            (la giacenza scende). È l'unico momento in cui si tocca il magazzino.</li>
+            <li><strong>Produzione</strong> — il grafo di completamento della commessa mostra l'avanzamento.
+            Un materiale completo in scaffalatura appare come nodo <strong>"pronto"</strong> (verde tratteggiato).</li>
+            <li><strong>Conferma manuale (trascinamento)</strong> — l'avanzamento <strong>non</strong> scatta da solo:
+            l'utente <strong>trascina l'etichetta dell'elemento pronto sul suo padre</strong> per confermarlo. Solo allora
+            conta nel progresso. La conferma è <strong>a cascata</strong>: prima i materiali nel loro processo, poi il
+            processo (con tutti i materiali confermati) sul suo padre, poi la sottolavorazione, infine la macchina
+            sulla commessa. Ogni passo è un trascinamento; un click su un elemento confermato permette di <strong>annullare</strong> la conferma se si è sbagliato.</li>
+        </ol>
+
+        <div class="box key">
+            <h3>Avanzamento confermato a mano: solo ciò che si trascina conta</h3>
+            <p style="margin:4px 0">
+            La preparazione in scaffalatura rende un materiale <strong>"pronto"</strong>, ma <strong>non</strong> fa
+            avanzare da sola la percentuale della commessa. L'avanzamento progredisce <strong>solo</strong> quando
+            l'utente trascina l'elemento pronto sul padre nel grafo: quel gesto scrive una riga in
+            <code>avanzamenti_confermati</code>, e la barra di progresso conta <strong>esclusivamente</strong> gli
+            elementi confermati. Annullare una conferma non restituisce nulla al magazzino: i materiali preparati
+            in <code>fornitura_materiali</code> restano invariati.
+            </p>
+        </div>
+
+        <div class="box">
+            <h3>Fabbisogno di ogni richiesta</h3>
+            <p style="margin:4px 0">
+            Per ogni richiesta di materiale il fabbisogno è
+            <code>quantità della ricetta × numero di macchine in commessa</code>; confrontandolo con quanto è stato
+            preparato in scaffalatura si capisce se l'elemento è completo (e quindi "pronto" da confermare).
+            </p>
+        </div>
+
+        <h2>4 · Le tabelle del database</h2>
+        <p class="small">Legenda colonne: <span class="pk">grassetto</span> = chiave primaria ·
+        <span class="fk">verde</span> = chiave esterna (collegamento ad un'altra tabella).</p>
+
+        <div class="tbl">
+            <span class="name">clienti</span><span class="role catalogo">Anagrafica</span>
+            <p>I clienti per cui si producono le commesse. Anagrafica di base.</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo del cliente.</td></tr>
+                <tr><td class="col-name">nome_cliente</td><td class="col-type">varchar</td><td>Ragione sociale / nome del cliente.</td></tr>
+                <tr><td class="col-name">partita_iva</td><td class="col-type">varchar</td><td>Partita IVA (opzionale).</td></tr>
+            </table>
+        </div>
+
+        <div class="tbl">
+            <span class="name">commesse</span><span class="role produzione">Produzione</span>
+            <p>La <strong>commessa</strong>: l'ordine di lavoro per un cliente. Contiene la richiesta di produzione di una o più macchine.</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo della commessa.</td></tr>
+                <tr><td class="col-name">codice_commessa</td><td class="col-type">varchar</td><td>Codice leggibile (es. COM-2025-001).</td></tr>
+                <tr><td class="col-name fk">id_cliente</td><td class="col-type">int → clienti</td><td>Cliente a cui appartiene la commessa.</td></tr>
+                <tr><td class="col-name">descrizione</td><td class="col-type">varchar</td><td>Descrizione libera della commessa.</td></tr>
+                <tr><td class="col-name">anno</td><td class="col-type">int</td><td>Anno di riferimento.</td></tr>
+                <tr><td class="col-name">data_consegna</td><td class="col-type">date</td><td>Data prevista di consegna.</td></tr>
+                <tr><td class="col-name">stato_chiusura</td><td class="col-type">enum</td><td><code>APERTA</code> / <code>CHIUSA</code>.</td></tr>
+            </table>
+            <p class="small">Nota: la tabella è condivisa con il gestionale aziendale e contiene altri campi (tipo, settore, ecc.) non utilizzati da questo modulo.</p>
+        </div>
+
+        <div class="tbl">
+            <span class="name">macchine</span><span class="role catalogo">Catalogo</span>
+            <p><strong>Catalogo dei modelli di macchina.</strong> Definisce i tipi di macchina che l'azienda progetta; vengono poi richiamati nelle commesse. È il "modello", non l'unità fisica.</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo del modello di macchina.</td></tr>
+                <tr><td class="col-name">codice</td><td class="col-type">varchar</td><td>Codice del modello.</td></tr>
+                <tr><td class="col-name">descrizione</td><td class="col-type">varchar</td><td>Descrizione del modello.</td></tr>
+            </table>
+        </div>
+
+        <div class="tbl">
+            <span class="name">commessa_macchine</span><span class="role produzione">Produzione</span>
+            <p>Collega una <strong>commessa</strong> ai <strong>modelli di macchina</strong> che le servono: è l'<strong>unità in produzione</strong> (quante macchine di quel modello servono in quella commessa).</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo dell'associazione.</td></tr>
+                <tr><td class="col-name fk">id_commessa</td><td class="col-type">int → commesse</td><td>Commessa di appartenenza.</td></tr>
+                <tr><td class="col-name fk">id_macchina</td><td class="col-type">int → macchine</td><td>Modello di macchina richiesto.</td></tr>
+                <tr><td class="col-name">quantita</td><td class="col-type">int</td><td>Numero di macchine di quel modello in questa commessa (moltiplica il fabbisogno di materiali).</td></tr>
+                <tr><td class="col-name">stato</td><td class="col-type">enum</td><td><code>DA_PRODURRE</code> (standard) / <code>IN_MAGAZZINO</code> (già disponibile).</td></tr>
+                <tr><td class="col-name">collassata</td><td class="col-type">bool</td><td>Flag di interfaccia: macchina completata e "riposta" nel grafo.</td></tr>
+            </table>
+        </div>
+
+        <div class="tbl">
+            <span class="name">processi_tipo</span><span class="role catalogo">Catalogo</span>
+            <p><strong>Catalogo condiviso dei tipi di lavorazione</strong> (es. "saldatura", "foratura"). Riutilizzabili su qualsiasi macchina; gestiti dalla scheda "Lavorazioni".</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo del tipo di processo.</td></tr>
+                <tr><td class="col-name">descrizione</td><td class="col-type">varchar</td><td>Nome del processo.</td></tr>
+            </table>
+        </div>
+
+        <div class="tbl">
+            <span class="name">lavorazioni</span><span class="role catalogo">Catalogo</span>
+            <p>L'<strong>istanza</strong> di un processo su una specifica macchina del catalogo: definisce i <strong>passi</strong> di costruzione di quel modello, in <strong>sequenza</strong>.</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo della lavorazione.</td></tr>
+                <tr><td class="col-name fk">id_macchina</td><td class="col-type">int → macchine</td><td>Modello di macchina a cui appartiene il passo.</td></tr>
+                <tr><td class="col-name fk">id_processo</td><td class="col-type">int → processi_tipo</td><td>Tipo di processo eseguito (da cui prende il nome).</td></tr>
+                <tr><td class="col-name fk">tav_padre</td><td class="col-type">int → lavorazioni</td><td>Passo <strong>precedente</strong> nella sequenza (auto-collegamento): definisce l'ordine.</td></tr>
+                <tr><td class="col-name fk">id_semilavorato</td><td class="col-type">int → semilavorati</td><td>Se valorizzato, questo passo rappresenta la <strong>produzione di un semilavorato</strong>.</td></tr>
+            </table>
+        </div>
+
+        <div class="tbl">
+            <span class="name">materialeMagazzino</span><span class="role magazzino">Magazzino</span>
+            <p>Il <strong>catalogo delle materie prime</strong> con la <strong>giacenza fisica</strong>. È il magazzino vero e proprio: l'unica "verità" sulle scorte.</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo del materiale.</td></tr>
+                <tr><td class="col-name">codiceMateriale</td><td class="col-type">varchar</td><td>Codice del materiale.</td></tr>
+                <tr><td class="col-name">descrizione</td><td class="col-type">varchar</td><td>Descrizione del materiale.</td></tr>
+                <tr><td class="col-name">quantita</td><td class="col-type">int</td><td><strong>Giacenza disponibile in magazzino.</strong> Scende solo con le preparazioni in scaffalatura.</td></tr>
+            </table>
+        </div>
+
+        <div class="tbl">
+            <span class="name">rich_mat</span><span class="role catalogo">Catalogo (ricetta)</span>
+            <p>La <strong>richiesta di materiale</strong>: <em>quanto</em> di un materiale serve. Può essere legata a una lavorazione (materiale lavorato da quel processo) <strong>oppure</strong> direttamente alla macchina (componente montato così com'è). È l'elenco materiali (BOM) della macchina.</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo della richiesta.</td></tr>
+                <tr><td class="col-name fk">id_lavorazione</td><td class="col-type">int → lavorazioni</td><td>Lavorazione che richiede il materiale (oppure vuoto).</td></tr>
+                <tr><td class="col-name fk">id_macchina</td><td class="col-type">int → macchine</td><td>Macchina, se il materiale è "diretto" (senza processo).</td></tr>
+                <tr><td class="col-name fk">id_materiale</td><td class="col-type">int → materialeMagazzino</td><td>Materiale richiesto.</td></tr>
+                <tr><td class="col-name">quantita</td><td class="col-type">float</td><td>Quantità necessaria per <strong>una</strong> macchina.</td></tr>
+            </table>
+            <p class="small">Esattamente uno tra <code>id_lavorazione</code> e <code>id_macchina</code> è valorizzato.</p>
+        </div>
+
+        <div class="tbl">
+            <span class="name">fornitura_materiali</span><span class="role magazzino">Magazzino / Avanzamento</span>
+            <p>Il cuore dell'avanzamento: <strong>quante unità di una richiesta sono state preparate</strong> (prelevate dal magazzino) per una specifica unità-in-commessa. Viene scritta dalla <strong>Scaffalatura</strong>; il grafo di commessa la legge soltanto.</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo della riga di preparazione.</td></tr>
+                <tr><td class="col-name fk">id_commessa_macchina</td><td class="col-type">int → commessa_macchine</td><td>A quale unità-in-commessa è destinata.</td></tr>
+                <tr><td class="col-name fk">id_rich_mat</td><td class="col-type">int → rich_mat</td><td>A quale richiesta di materiale si riferisce.</td></tr>
+                <tr><td class="col-name">quantita_fornita</td><td class="col-type">int</td><td>Unità già preparate. Confrontate col fabbisogno danno l'avanzamento.</td></tr>
+            </table>
+        </div>
+
+        <div class="tbl">
+            <span class="name">avanzamenti_confermati</span><span class="role produzione">Produzione / Avanzamento</span>
+            <p>Registra le <strong>conferme manuali</strong> di avanzamento nel grafo di commessa. Un materiale o un processo, anche se completo in scaffalatura, <strong>non conta nel progresso</strong> finché l'utente non lo <strong>trascina sul padre</strong> nel grafo: quel gesto crea una riga qui. Il progresso della commessa è calcolato <strong>solo</strong> sugli elementi presenti in questa tabella. Annullare una conferma elimina la riga ma <strong>non</strong> tocca le forniture in <code>fornitura_materiali</code> (i materiali preparati restano).</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo della conferma.</td></tr>
+                <tr><td class="col-name fk">id_commessa_macchina</td><td class="col-type">int → commessa_macchine</td><td>Unità-in-commessa a cui si riferisce l'avanzamento.</td></tr>
+                <tr><td class="col-name">tipo</td><td class="col-type">enum</td><td><code>rich_mat</code> (un materiale) oppure <code>lavorazione</code> (un processo/sottolavorazione).</td></tr>
+                <tr><td class="col-name">ref_id</td><td class="col-type">int</td><td>Id dell'elemento confermato (una <code>rich_mat</code> o una <code>lavorazione</code> secondo <code>tipo</code>).</td></tr>
+            </table>
+            <p class="small">Vincolo di unicità su (id_commessa_macchina, tipo, ref_id): una conferma è idempotente. La conferma a livello di macchina usa invece il flag <code>collassata</code> su <code>commessa_macchine</code>.</p>
+        </div>
+
+        <div class="tbl">
+            <span class="name">scaffale_celle</span><span class="role produzione">Produzione / Scaffalatura</span>
+            <p>Memorizza <strong>quale commessa è preparata in ogni cella fisica</strong> dello scaffale (es. la cella <code>A1</code> → commessa COM-2025-001). Prima questa associazione viveva solo nel browser (localStorage); ora è sul database, così lo scaffale è <strong>identico da qualsiasi browser o PC</strong> e non si perde più. I materiali della cella non sono duplicati qui: discendono dalla commessa (via <code>fornitura_materiali</code>), basta sapere quale commessa contiene la cella.</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">cella</td><td class="col-type">varchar</td><td>Identificativo della cella fisica (riga+colonna, es. <code>A1</code>, <code>D8</code>). È la chiave primaria.</td></tr>
+                <tr><td class="col-name fk">id_commessa</td><td class="col-type">int → commesse</td><td>Commessa attualmente preparata in quella cella.</td></tr>
+            </table>
+        </div>
+
+        <div class="tbl">
+            <span class="name">semilavorati</span><span class="role catalogo">Catalogo</span>
+            <p><strong>Catalogo dei prodotti interni</strong> (semilavorati): una lavorazione applicata a dei componenti. <strong>Non hanno giacenza propria</strong>: si producono dai loro componenti grezzi.</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo del semilavorato.</td></tr>
+                <tr><td class="col-name">codice</td><td class="col-type">varchar</td><td>Codice del semilavorato.</td></tr>
+                <tr><td class="col-name">descrizione</td><td class="col-type">varchar</td><td>Nome del semilavorato (es. "telaio saldato").</td></tr>
+                <tr><td class="col-name fk">id_processo</td><td class="col-type">int → processi_tipo</td><td>La lavorazione che lo produce.</td></tr>
+            </table>
+        </div>
+
+        <div class="tbl">
+            <span class="name">semilavorato_componenti</span><span class="role catalogo">Catalogo (ricetta)</span>
+            <p>La <strong>ricetta di un semilavorato</strong>: i componenti necessari. Ogni componente è una materia prima <strong>oppure</strong> un altro semilavorato (annidamento ricorsivo, con protezione anti-ciclo).</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo della riga di ricetta.</td></tr>
+                <tr><td class="col-name fk">id_semilavorato</td><td class="col-type">int → semilavorati</td><td>Semilavorato che si sta componendo.</td></tr>
+                <tr><td class="col-name fk">id_materiale</td><td class="col-type">int → materialeMagazzino</td><td>Componente = materia prima (oppure vuoto).</td></tr>
+                <tr><td class="col-name fk">id_semilavorato_comp</td><td class="col-type">int → semilavorati</td><td>Componente = altro semilavorato (oppure vuoto).</td></tr>
+                <tr><td class="col-name">quantita</td><td class="col-type">float</td><td>Quantità del componente per un semilavorato.</td></tr>
+            </table>
+        </div>
+
+        <div class="tbl">
+            <span class="name">utenti</span><span class="role sistema">Sistema</span>
+            <p>Gli <strong>utenti</strong> dell'applicazione e i loro permessi. La password è salvata come <strong>hash</strong> (bcrypt), mai in chiaro. L'accesso è protetto con token JWT.</p>
+            <table class="cols">
+                <tr><th>Campo</th><th>Tipo</th><th>Descrizione</th></tr>
+                <tr><td class="col-name pk">id</td><td class="col-type">int</td><td>Identificativo dell'utente.</td></tr>
+                <tr><td class="col-name">identificatore_login</td><td class="col-type">varchar</td><td>Nome utente per l'accesso.</td></tr>
+                <tr><td class="col-name">password</td><td class="col-type">varchar</td><td>Hash bcrypt della password.</td></tr>
+                <tr><td class="col-name">nome / cognome</td><td class="col-type">varchar</td><td>Dati anagrafici.</td></tr>
+                <tr><td class="col-name">ruolo</td><td class="col-type">enum</td><td><code>Admin</code> / <code>Dipendente</code> / <code>Terzista</code>.</td></tr>
+                <tr><td class="col-name">push_token</td><td class="col-type">varchar</td><td>Token per eventuali notifiche push.</td></tr>
+            </table>
+        </div>
+
+        <h2>5 · Mappa delle relazioni</h2>
+        <div class="er"><span class="t">scaffale_celle</span> N──1 <span class="t">commesse</span> 1──N <span class="t">commessa_macchine</span> N──1 <span class="t">macchine</span>
+   (cella → commessa)                 │                    │      │
+                                      │ (preparazione)     │      │ (catalogo: struttura)
+<span class="t">clienti</span> 1──N <span class="t">commesse</span>                ▼      │ 1──N <span class="t">avanzamenti_confermati</span>  ▼
+                                        <span class="t">fornitura_materiali</span> └──────(conferme manuali)  <span class="t">rich_mat</span> N──1 <span class="t">materialeMagazzino</span>
+                                                 │ N──1 <span class="t">rich_mat</span>                              ▲
+                                                 ▼                                            │ (sotto un processo)
+                                          <span class="t">processi_tipo</span> 1──N <span class="t">lavorazioni</span> ─────────────────┘
+                                                  ▲                       │ (auto: sequenza tav_padre)
+                                                  │                       ▼
+                                          <span class="t">semilavorati</span> 1──N <span class="t">semilavorato_componenti</span> ──▶ materie prime / altri semilavorati
+
+<span class="c">Catalogo</span> = macchine · processi_tipo · semilavorati · semilavorato_componenti · materialeMagazzino · rich_mat (ricetta)
+<span class="c">Produzione</span> = commesse · commessa_macchine · scaffale_celle (cella → commessa)
+<span class="c">Avanzamento</span> = fornitura_materiali (preparazione, scala il magazzino) · avanzamenti_confermati (conferme manuali = progresso)</div>
+
+        <footer class="small">
+        Documento per il progetto FSL-PCTO Bevita Srl. Le tabelle descritte sono quelle effettivamente
+        utilizzate dal modulo di preparazione materiali; il database aziendale può contenere ulteriori tabelle
+        e campi non pertinenti a questo modulo.
+        </footer>
+
+    </main>
+
+    <!-- Solo utente autenticato e con ruolo admin -->
+    <script src="config.js"></script>
+    <script>
+        if (!localStorage.getItem('token')) window.location.href = 'login.html';
+    </script>
+    <script src="framework.js"></script>
+    <script>
+        // Guard solo-admin condiviso: login se non autenticato/scaduto, index se non admin.
+        richiediAdmin();
+    </script>
+
+</body>
+</html>

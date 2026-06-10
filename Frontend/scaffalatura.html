@@ -31,23 +31,6 @@
         </div>
     </div>
 
-    <!-- MODAL ASSEGNAZIONE CELLA -->
-    <div class="cell-assign-overlay" id="cellAssignOverlay">
-        <div class="cell-assign-modal">
-            <div class="ca-header">
-                <span class="ca-title" id="caTitle">Cella —</span>
-                <button class="modal-close" id="caClose"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="ca-body" id="caBody">
-                <!-- popolato dinamicamente da scaffaleOpenCellModal() in framework.js -->
-            </div>
-            <div class="ca-footer">
-                <button class="ca-btn-clear" id="caBtnClear"><i class="fa-solid fa-trash"></i> Svuota</button>
-                <button class="ca-btn-save"  id="caBtnSave">Salva</button>
-            </div>
-        </div>
-    </div>
-
     <main class="scaffale-main">
 
         <div class="scaffale-toprow">
@@ -66,6 +49,7 @@
 
     </main>
 
+    <script src="config.js"></script>
     <script>
         if (!localStorage.getItem('token')) window.location.href = 'login.html';
     </script>
