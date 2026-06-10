@@ -144,6 +144,10 @@
         const API = window.BACKEND_URL;
         const token = localStorage.getItem('token');
 
+        // Escape HTML per prevenire XSS quando si inseriscono dati utente nel DOM.
+        const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
         // Auth guard — solo admin
         (function() {
             if (!token) { window.location.href = 'login.html'; return; }
@@ -187,22 +191,28 @@
             }
             grid.innerHTML = utenti.map(u => `
                 <div class="user-card" data-id="${u.id}">
-                    <div class="user-avatar">${iniziale(u)}</div>
+                    <div class="user-avatar">${esc(iniziale(u))}</div>
                     <div class="user-info">
-                        <div class="user-nome">${nomeCompleto(u)}</div>
-                        <div class="user-login"><i class="fa-solid fa-at" style="font-size:11px;margin-right:4px;"></i>${u.identificatore_login}</div>
+                        <div class="user-nome">${esc(nomeCompleto(u))}</div>
+                        <div class="user-login"><i class="fa-solid fa-at" style="font-size:11px;margin-right:4px;"></i>${esc(u.identificatore_login)}</div>
                     </div>
-                    <span class="user-ruolo-badge">${u.ruolo}</span>
+                    <span class="user-ruolo-badge">${esc(u.ruolo)}</span>
                     <div class="user-actions">
-                        <button class="user-btn" onclick="apriCambioPassword(${u.id}, '${u.identificatore_login}')">
+                        <button class="user-btn btn-pwd" data-id="${u.id}" data-login="${esc(u.identificatore_login)}">
                             <i class="fa-solid fa-key"></i> Password
                         </button>
-                        <button class="user-btn danger" onclick="eliminaUtente(${u.id}, '${nomeCompleto(u).replace(/'/g,"\\'")}')">
+                        <button class="user-btn danger btn-del" data-id="${u.id}" data-nome="${esc(nomeCompleto(u))}">
                             <i class="fa-solid fa-trash"></i>
                         </button>
                     </div>
                 </div>
             `).join('');
+
+            // Listener al posto degli onclick inline (niente dati utente nel markup degli handler).
+            grid.querySelectorAll('.btn-pwd').forEach(b =>
+                b.addEventListener('click', () => apriCambioPassword(b.dataset.id, b.dataset.login)));
+            grid.querySelectorAll('.btn-del').forEach(b =>
+                b.addEventListener('click', () => eliminaUtente(b.dataset.id, b.dataset.nome)));
         }
 
         function caricaUtenti() {
@@ -278,7 +288,7 @@
             modalBody.innerHTML = `
                 <div class="modal-field">
                     <label>Utente</label>
-                    <input type="text" value="${login}" disabled style="opacity:0.5;cursor:not-allowed;">
+                    <input type="text" value="${esc(login)}" disabled style="opacity:0.5;cursor:not-allowed;">
                 </div>
                 <div class="modal-field">
                     <label>Nuova password *</label>

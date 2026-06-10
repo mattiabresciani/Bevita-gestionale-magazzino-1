@@ -1,6 +1,13 @@
 // Base API: stesso host della pagina (localhost o 127.0.0.1) per evitare mismatch di origine
 const API_BASE = window.BACKEND_URL;
 
+// Escape HTML condiviso: da usare quando si inseriscono dati (codici, descrizioni)
+// dentro innerHTML, per prevenire XSS persistente.
+function escHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 // ── Autenticazione / redirect (UNICO punto, condiviso da tutte le pagine) ──────
 // Comportamento coerente ovunque:
 //   • manca il token            → login.html
@@ -676,10 +683,6 @@ const SCAFFALE_COL_POS = {
     8: { l: 85.7, w: 11.8 }
 };
 
-<<<<<<< HEAD
-const SCAFFALE_KEY  = 'scaffalatura_celle'; 
-=======
->>>>>>> 64b71d2a7edc54f65dc505dae6cb5e67721da40b
 const SCAFFALE_ROWS = ['D', 'C', 'B', 'A'];
 const SCAFFALE_COLS = [1, 2, 3, 4, 5, 6, 7, 8];
 
@@ -703,22 +706,7 @@ async function scaffaleFetchCelle() {
     return scaffaleCelleCache;
 }
 
-<<<<<<< HEAD
-// Carica e deserializza le celle dello scaffale dal localStorage, migrando eventuali dati nel vecchio formato.
-function scaffaleLoadCelle() {
-    try {
-        const raw = JSON.parse(localStorage.getItem(SCAFFALE_KEY)) || {};
-        const out = {};
-        Object.entries(raw).forEach(([k, v]) => { out[k] = scaffaleMigraCella(v); });
-        return out; 
-    } catch { return {}; }
-}
-
-// Serializza e salva le celle dello scaffale nel localStorage.
-function scaffaleSaveCelle(c) {
-    localStorage.setItem(SCAFFALE_KEY, JSON.stringify(c));
-=======
-// Lettura sincrona dalla cache (forma: { "A1": { commessa: {...} } }).
+// Lettura sincrona dalla cache (forma: { "A1": { commessa: {...} } }), popolata da scaffaleFetchCelle().
 function scaffaleLoadCelle() {
     return scaffaleCelleCache;
 }
@@ -742,7 +730,6 @@ async function scaffaleClearCella(cella) {
     });
     if (!r.ok) throw new Error(r.status);
     delete scaffaleCelleCache[cella];
->>>>>>> 64b71d2a7edc54f65dc505dae6cb5e67721da40b
 }
 
 // GET autenticata verso il backend: aggiunge il token JWT e lancia un'eccezione se la risposta non è ok.
@@ -756,10 +743,6 @@ async function scaffaleGet(path) {
 
 // ── Overlay celle sulla foto ─────────────────────────────────── 
 
-<<<<<<< HEAD
-// Costruisce le celle cliccabili sovrapposte alla foto dello scaffale usando posizioni percentuali;
-// mostra commessa assegnata e conteggio materiali in ogni cella occupata, più etichette riga/colonna.
-=======
 function scaffaleCommessaCella(id) {
     const c = scaffaleLoadCelle()[id];
     return c && c.commessa ? c.commessa : null;
@@ -775,7 +758,6 @@ function scaffaleColoreCommessa(id) {
     };
 }
 
->>>>>>> 64b71d2a7edc54f65dc505dae6cb5e67721da40b
 function scaffaleBuildOverlay() {
     const overlay = document.getElementById('shelfOverlay');
     if (!overlay) return;
@@ -859,22 +841,7 @@ function scaffaleRenderAssegna(cellId, comm) {
     document.querySelector('#scaffalePopupOverlay .sp-header').style.boxShadow = 'none';
     document.getElementById('spDesc').textContent = comm ? 'Cambia la commessa di questa cella' : 'Cella vuota — assegna una commessa';
 
-<<<<<<< HEAD
-// Apre il modal di assegnazione per la cella `id`: precarica la commessa attuale e
-// inizializza la lista temporanea dei materiali (scaffaleTempMat) con quelli già salvati.
-function scaffaleOpenCellModal(id) {
-    scaffaleActiveCellId = id;
-    document.getElementById('caTitle').textContent = 'Cella ' + id;
-
-    const celle = scaffaleLoadCelle();
-    const cella = celle[id] || { commessa: null, materiali: [] };
-    scaffaleTempMat = [...(cella.materiali || [])];
-
-    // Genera il corpo del modal dinamicamente
-    const body = document.getElementById('caBody');
-=======
     const body = document.getElementById('spBody');
->>>>>>> 64b71d2a7edc54f65dc505dae6cb5e67721da40b
     body.innerHTML = `
         <div class="fb-assign">
             <p class="fb-assign-label"><i class="fa-solid fa-clipboard-list"></i> Quale commessa vuoi preparare in questa cella?</p>
@@ -908,26 +875,7 @@ function scaffaleOpenCellModal(id) {
     if (cancel) cancel.addEventListener('click', () => { if (comm) scaffaleOpenFactory(comm, cellId); });
 }
 
-<<<<<<< HEAD
-// Aggiorna la lista materiali temporanei (scaffaleTempMat) nel modal di assegnazione cella;
-// collega il pulsante "×" per rimuovere ogni voce.
-function scaffaleRenderMatList() {
-    const list = document.getElementById('caMatList');
-    if (!list) return;
-    if (!scaffaleTempMat.length) {
-        list.innerHTML = '<p class="ca-mat-empty">Nessun materiale aggiunto</p>';
-        return;
-    }
-    list.innerHTML = scaffaleTempMat.map((m, i) => `
-        <div class="ca-mat-row">
-            <span class="ca-mat-codice">${m.codice}</span>
-            <span class="ca-mat-nome">${m.descrizione || ''}</span>
-            <span class="ca-mat-qty-tag">×${m.quantita}</span>
-            <button class="ca-mat-remove" data-i="${i}"><i class="fa-solid fa-xmark"></i></button>
-        </div>`).join('');
-=======
 // ── Pannello "fabbrica": preparazione materiali di una commessa ────
->>>>>>> 64b71d2a7edc54f65dc505dae6cb5e67721da40b
 
 // Somma le rich_mat di una macchina per materiale (processi ricorsivi + materiali diretti)
 function scaffaleAggregaMateriali(macchina) {
@@ -995,8 +943,8 @@ function scaffaleRenderFactory(albero) {
         const completa = mats.length > 0 && mats.every(x => x.fornito >= x.target);
         h += `<div class="fb-macchina ${completa ? 'fb-ready' : ''}">
             <div class="fb-mac-header">
-                <span class="fb-mac-codice"><i class="fa-solid fa-industry"></i> ${m.codice || '—'}</span>
-                <span class="fb-mac-nome">${m.descrizione || ''}</span>
+                <span class="fb-mac-codice"><i class="fa-solid fa-industry"></i> ${escHtml(m.codice || '—')}</span>
+                <span class="fb-mac-nome">${escHtml(m.descrizione || '')}</span>
                 <span class="badge badge-commessa">×${m.quantita ?? 1}</span>
                 ${completa ? '<span class="fb-ready-badge"><i class="fa-solid fa-circle-check"></i> Pronta per produzione</span>' : ''}
             </div>`;
@@ -1009,8 +957,8 @@ function scaffaleRenderFactory(albero) {
                 const done = x.fornito >= x.target;
                 h += `<div class="fb-mat-row ${done ? 'fb-mat-done' : ''}" data-cm="${m.commessa_macchina_id}" data-mat="${x.id_materiale}">
                     <div class="fb-mat-info">
-                        <span class="fb-mat-codice">${x.codice || '—'}</span>
-                        <span class="fb-mat-nome">${x.descrizione || ''}</span>
+                        <span class="fb-mat-codice">${escHtml(x.codice || '—')}</span>
+                        <span class="fb-mat-nome">${escHtml(x.descrizione || '')}</span>
                     </div>
                     <div class="fb-mat-progress"><div class="fb-mat-fill ${done ? 'full' : ''}" style="width:${pct}%"></div></div>
                     <span class="fb-mat-count">${x.fornito}/${x.target}</span>
@@ -1055,33 +1003,6 @@ function scaffaleRenderFactory(albero) {
     });
 }
 
-<<<<<<< HEAD
-// Aggiunge il materiale selezionato (con la quantità indicata) alla lista temporanea della cella;
-// se il materiale è già presente, ne somma la quantità anziché duplicarlo.
-function scaffaleAddMatToTemp() {
-    const sel  = document.getElementById('caMatSel');
-    const qtyEl = document.getElementById('caMatQty');
-    if (!sel.value) return;
-    const mat = scaffaleMateriali.find(m => String(m.id) === sel.value);
-    if (!mat) return;
-    const qty = parseFloat(qtyEl.value) || 1;
-    const existing = scaffaleTempMat.find(m => m.id === mat.id);
-    if (existing) {
-        existing.quantita = parseFloat((existing.quantita + qty).toFixed(4));
-    } else {
-        scaffaleTempMat.push({ id: mat.id, codice: mat.codice, descrizione: mat.descrizione, quantita: qty });
-    }
-    sel.value = '';
-    qtyEl.value = '1';
-    scaffaleRenderMatList();
-}
-
-// Chiude il modal di assegnazione cella e resetta l'id attivo e la lista materiali temporanei.
-function scaffaleCloseCellModal() {
-    document.getElementById('cellAssignOverlay').classList.remove('open');
-    scaffaleActiveCellId = null;
-    scaffaleTempMat = [];
-=======
 async function scaffaleAssegna(cm, mat, qty, preleva) {
     if (!qty || qty < 1) qty = 1;
     const azione = preleva ? 'fornisci' : 'restituisci';
@@ -1096,7 +1017,6 @@ async function scaffaleAssegna(cm, mat, qty, preleva) {
     } catch {
         alert('Errore di rete.');
     }
->>>>>>> 64b71d2a7edc54f65dc505dae6cb5e67721da40b
 }
 
 // ── Ricerca: commesse + materiali ──────────────────────────────────
@@ -1126,8 +1046,8 @@ function scaffaleInitSearch() {
                         <i class="fa-solid ${h.tipo === 'commessa' ? 'fa-file-invoice' : 'fa-box'}"></i>
                         ${h.tipo === 'commessa' ? 'Commessa' : 'Materiale'}
                     </span>
-                    <span class="ssd-codice">${h.data.codice}</span>
-                    <span class="ssd-desc">${h.data.descrizione || ''}</span>
+                    <span class="ssd-codice">${escHtml(h.data.codice)}</span>
+                    <span class="ssd-desc">${escHtml(h.data.descrizione || '')}</span>
                 </div>`).join('');
 
             dropdown.querySelectorAll('.ssd-item').forEach(item => {
@@ -1152,196 +1072,7 @@ function scaffaleClearHighlights() {
     document.querySelectorAll('.shelf-cell.highlighted').forEach(c => c.classList.remove('highlighted'));
 }
 
-<<<<<<< HEAD
-// ── Popup commessa ─────────────────────────────────────────────────
-
-// Apre il popup di dettaglio di una commessa: evidenzia le celle che la contengono e
-// carica da API macchine e materiali necessari, poi delega il rendering a scaffaleRenderCommessaPopup.
-async function scaffaleOpenCommessaPopup(comm) {
-    document.getElementById('spCodice').textContent = comm.codice;
-    document.getElementById('spDesc').textContent   = comm.descrizione || '';
-    document.getElementById('spBody').innerHTML =
-        '<div class="sp-loading"><i class="fa-solid fa-spinner fa-spin"></i> Caricamento...</div>';
-    document.getElementById('scaffalePopupOverlay').classList.add('open');
-
-    scaffaleClearHighlights();
-    const celle = scaffaleLoadCelle();
-    const celleOcc = [];
-    Object.entries(celle).forEach(([cId, cella]) => {
-        if (cella?.commessa?.id === comm.id) {
-            celleOcc.push(cId);
-            const el = document.querySelector(`.shelf-cell[data-id="${cId}"]`);
-            if (el) el.classList.add('highlighted');
-        }
-    });
-
-    try {
-        const macchine = await scaffaleGet(`/commesse/${comm.id}/macchine`);
-        const macchineConMat = await Promise.all(
-            macchine.map(async m => ({
-                ...m,
-                materiali: await scaffaleGet(`/macchine/${m.id_macchina}/materiali`)
-            }))
-        );
-        scaffaleRenderCommessaPopup(comm, celleOcc, macchineConMat);
-    } catch {
-        document.getElementById('spBody').innerHTML =
-            '<div class="sp-loading" style="color:#d93025"><i class="fa-solid fa-triangle-exclamation"></i> Errore nel caricamento.</div>';
-    }
-}
-
-// Popola il corpo del popup commessa con: celle occupate, badge stato/anno,
-// elenco macchine e per ciascuna i materiali con indicatore di stock (ok/scarso/esaurito).
-function scaffaleRenderCommessaPopup(comm, celleOcc, macchineConMat) {
-    let h = '';
-
-    h += `<div class="sp-section">
-        <div class="sp-section-title"><i class="fa-solid fa-location-dot"></i> Celle in scaffale</div>
-        <div class="sp-celle-chips">
-            ${!celleOcc.length
-                ? '<span class="sp-cella-chip empty">Nessuna cella assegnata</span>'
-                : celleOcc.sort().map(id => `<span class="sp-cella-chip">${id}</span>`).join('')}
-        </div></div>`;
-
-    h += `<div class="sp-section">
-        <div class="sp-section-title"><i class="fa-solid fa-circle-info"></i> Dettagli commessa</div>
-        <div class="sp-badges">
-            <span class="badge ${comm.stato === 'APERTA' ? 'badge-aperta' : 'badge-chiusa'}">${comm.stato || '—'}</span>
-            ${comm.anno ? `<span class="badge">${comm.anno}</span>` : ''}
-        </div></div>`;
-
-    h += `<div class="sp-section">
-        <div class="sp-section-title"><i class="fa-solid fa-industry"></i> Macchine e Materiali necessari</div>`;
-
-    if (!macchineConMat.length) {
-        h += `<p style="font-size:13px;color:#bbb;">Nessuna macchina associata.</p>`;
-    } else {
-        macchineConMat.forEach(m => {
-            h += `<div class="sp-macchina-block">
-                <div class="sp-macchina-header">
-                    <span class="sp-mac-codice">${m.codice || '—'}</span>
-                    <span class="sp-mac-nome">${m.descrizione || ''}</span>
-                    <span class="sp-mac-qty">Qtà ${m.quantita ?? '—'}</span>
-                </div>`;
-            if (!m.materiali.length) {
-                h += `<div style="padding:10px 14px;font-size:12px;color:#bbb;">Nessun materiale associato</div>`;
-            } else {
-                h += `<div class="sp-materiali-list">`;
-                m.materiali.forEach(mat => {
-                    const s = mat.quantita_stock, n = mat.quantita_necessaria;
-                    const cls   = s <= 0 ? 'danger' : s < n ? 'warn' : 'ok';
-                    const label = s <= 0 ? 'Esaurito' : s < n ? 'Scarso' : 'Disponibile';
-                    h += `<div class="sp-mat-row">
-                        <div class="sp-mat-dot"></div>
-                        <span class="sp-mat-codice">${mat.codice || '—'}</span>
-                        <span class="sp-mat-nome">${mat.descrizione || ''}</span>
-                        <span class="sp-mat-qty">×${n}</span>
-                        <span class="sp-mat-stock ${cls}">Stock: ${s} · ${label}</span>
-                    </div>`;
-                });
-                h += `</div>`;
-            }
-            h += `</div>`;
-        });
-    }
-    h += `</div>`;
-    document.getElementById('spBody').innerHTML = h;
-}
-
-// ── Popup materiale ────────────────────────────────────────────────
-
-// Apre il popup di dettaglio di un materiale: evidenzia le celle dove è fisicamente presente
-// (localStorage) e cerca via API le commesse/macchine che lo richiedono.
-async function scaffaleOpenMaterialePopup(mat) {
-    document.getElementById('spCodice').textContent = mat.codice;
-    document.getElementById('spDesc').textContent   = mat.descrizione || '';
-    document.getElementById('spBody').innerHTML =
-        '<div class="sp-loading"><i class="fa-solid fa-spinner fa-spin"></i> Ricerca in corso...</div>';
-    document.getElementById('scaffalePopupOverlay').classList.add('open');
-
-    scaffaleClearHighlights();
-
-    // Celle in cui è fisicamente presente (localStorage)
-    const celle = scaffaleLoadCelle();
-    const celleConMat = [];
-    Object.entries(celle).forEach(([cId, cella]) => {
-        if (!cella) return;
-        const trovato = (cella.materiali || []).find(m => m.id === mat.id);
-        if (trovato) {
-            celleConMat.push({ cellId: cId, commessa: cella.commessa, quantita: trovato.quantita });
-            const el = document.querySelector(`.shelf-cell[data-id="${cId}"]`);
-            if (el) el.classList.add('highlighted');
-        }
-    });
-
-    // Commesse che lo richiedono (API)
-    try {
-        const commesseCheLaUsano = [];
-        for (const comm of scaffaleCommesse) {
-            const macchine = await scaffaleGet(`/commesse/${comm.id}/macchine`);
-            for (const mac of macchine) {
-                const materiali = await scaffaleGet(`/macchine/${mac.id_macchina}/materiali`);
-                const found = materiali.find(m => m.id === mat.id);
-                if (found) commesseCheLaUsano.push({ commessa: comm, macchina: mac, quantita: found.quantita_necessaria });
-            }
-        }
-        scaffaleRenderMaterialePopup(mat, celleConMat, commesseCheLaUsano);
-    } catch {
-        document.getElementById('spBody').innerHTML =
-            '<div class="sp-loading" style="color:#d93025"><i class="fa-solid fa-triangle-exclamation"></i> Errore nel caricamento.</div>';
-    }
-}
-
-// Popola il corpo del popup materiale con: celle in cui è presente (con commessa e quantità)
-// e commesse/macchine che lo richiedono con lo stato della commessa.
-function scaffaleRenderMaterialePopup(mat, celleConMat, commesseCheLaUsano) {
-    let h = '';
-
-    // Celle dove è fisicamente presente
-    h += `<div class="sp-section">
-        <div class="sp-section-title"><i class="fa-solid fa-location-dot"></i> Presente nelle celle</div>`;
-    if (!celleConMat.length) {
-        h += `<p style="font-size:13px;color:#bbb;">Non presente in nessuna cella dello scaffale.</p>`;
-    } else {
-        h += `<div style="display:flex;flex-direction:column;gap:6px;">`;
-        celleConMat.sort((a, b) => a.cellId.localeCompare(b.cellId)).forEach(c => {
-            h += `<div class="sp-mat-cella-row">
-                <span class="sp-cella-chip">${c.cellId}</span>
-                <span class="sp-mat-cella-info">
-                    ${c.commessa ? `<span class="badge">${c.commessa.codice}</span>` : '<span style="color:#bbb;font-size:12px;">senza commessa</span>'}
-                    <span style="font-size:12px;color:#555;margin-left:6px;">× ${c.quantita} pz</span>
-                </span>
-            </div>`;
-        });
-        h += `</div>`;
-    }
-    h += `</div>`;
-
-    // Commesse che lo richiedono
-    h += `<div class="sp-section">
-        <div class="sp-section-title"><i class="fa-solid fa-industry"></i> Richiesto nelle commesse</div>`;
-    if (!commesseCheLaUsano.length) {
-        h += `<p style="font-size:13px;color:#bbb;">Non richiesto in nessuna commessa.</p>`;
-    } else {
-        h += `<div class="sp-materiali-list">`;
-        commesseCheLaUsano.forEach(c => {
-            h += `<div class="sp-mat-row">
-                <div class="sp-mat-dot"></div>
-                <span class="sp-mat-codice">${c.commessa.codice}</span>
-                <span class="sp-mat-nome">Macchina: ${c.macchina.codice}</span>
-                <span class="sp-mat-qty">×${c.quantita}</span>
-                <span class="badge ${c.commessa.stato === 'APERTA' ? 'badge-aperta' : 'badge-chiusa'}">${c.commessa.stato}</span>
-            </div>`;
-        });
-        h += `</div>`;
-    }
-    h += `</div>`;
-
-    document.getElementById('spBody').innerHTML = h;
-}
-=======
 // I vecchi popup commessa/materiale sono stati sostituiti dal pannello "fabbrica" (scaffaleOpenFactory).
->>>>>>> 64b71d2a7edc54f65dc505dae6cb5e67721da40b
 
 // Chiude il popup di dettaglio commessa/materiale e rimuove le evidenziazioni dalle celle.
 function scaffaleClosePopup() {

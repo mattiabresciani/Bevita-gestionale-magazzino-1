@@ -7,6 +7,13 @@ let sezioneCorrente = 'commesse';
 
 // ── UTILITY ───────────────────────────────────────────────────────────────────
 
+// Escape HTML: da usare SEMPRE quando si inseriscono dati (codici, descrizioni, ecc.)
+// dentro innerHTML o attributi, per prevenire XSS persistente.
+function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 async function apiFetch(path, method = 'GET', body = null) {
     const opts = {
         method,
@@ -128,12 +135,12 @@ function renderCommesse(dati, container) {
         div.innerHTML =
             '<div class="accordion-header">' +
                 '<span class="accordion-arrow">&#x203A;</span>' +
-                '<span class="item-code commessa-code">' + (c.codice ?? '-') + '</span>' +
+                '<span class="item-code commessa-code">' + esc(c.codice ?? '-') + '</span>' +
                 '<div class="accordion-badges">' +
-                    '<span class="card-desc">' + (c.descrizione ?? '-') + '</span>' +
-                    '<span class="badge">' + (c.anno ?? '-') + '</span>' +
-                    (c.data_consegna ? '<span class="badge"><i class="fa-regular fa-calendar"></i> ' + c.data_consegna + '</span>' : '') +
-                    '<span class="' + statoClass + '">' + (c.stato ?? '-') + '</span>' +
+                    '<span class="card-desc">' + esc(c.descrizione ?? '-') + '</span>' +
+                    '<span class="badge">' + esc(c.anno ?? '-') + '</span>' +
+                    (c.data_consegna ? '<span class="badge"><i class="fa-regular fa-calendar"></i> ' + esc(c.data_consegna) + '</span>' : '') +
+                    '<span class="' + statoClass + '">' + esc(c.stato ?? '-') + '</span>' +
                 '</div>' +
                 '<div class="card-progress" title="Avanzamento commessa">' +
                     '<div class="card-progress-track"><div class="card-progress-fill ' + ((c.progresso ?? 0) >= 100 ? 'cpf-done' : '') + '" style="width:' + (c.progresso ?? 0) + '%"></div></div>' +
@@ -202,9 +209,9 @@ function renderMacchine(dati, container) {
         div.innerHTML =
             '<div class="accordion-header">' +
                 '<span class="accordion-arrow">&#x203A;</span>' +
-                '<button class="item-code commessa-code machine-link-btn" title="Apri scheda">' + (m.codice ?? '-') + '</button>' +
+                '<button class="item-code commessa-code machine-link-btn" title="Apri scheda">' + esc(m.codice ?? '-') + '</button>' +
                 '<div class="accordion-badges">' +
-                    '<span class="card-desc">' + (m.descrizione ?? '-') + '</span>' +
+                    '<span class="card-desc">' + esc(m.descrizione ?? '-') + '</span>' +
                 '</div>' +
                 '<div class="card-actions">' +
                     '<button class="action-btn edit-btn btn-modifica" title="Modifica"><i class="fa-solid fa-pen"></i></button>' +
@@ -250,7 +257,7 @@ function renderLavorazioni(dati, container) {
         div.dataset.sezione = 'lavorazioni';
         div.innerHTML =
             '<div class="card-left">' +
-                '<span class="item-code commessa-code">' + (p.descrizione ?? '-') + '</span>' +
+                '<span class="item-code commessa-code">' + esc(p.descrizione ?? '-') + '</span>' +
             '</div>' +
             '<div class="card-right"></div>' +
             '<div class="card-actions card-actions-right">' +
@@ -276,10 +283,10 @@ function renderSemilavorati(dati, container) {
         div.innerHTML =
             '<div class="accordion-header">' +
                 '<span class="accordion-arrow">&#x203A;</span>' +
-                '<span class="item-code commessa-code">' + (s.codice || s.descrizione || '-') + '</span>' +
+                '<span class="item-code commessa-code">' + esc(s.codice || s.descrizione || '-') + '</span>' +
                 '<div class="accordion-badges">' +
-                    '<span class="card-desc">' + (s.descrizione ?? '-') + '</span>' +
-                    '<span class="badge" style="' + procStyle + '"><i class="fa-solid fa-screwdriver-wrench"></i> ' + (s.processo ?? 'processo non impostato') + '</span>' +
+                    '<span class="card-desc">' + esc(s.descrizione ?? '-') + '</span>' +
+                    '<span class="badge" style="' + procStyle + '"><i class="fa-solid fa-screwdriver-wrench"></i> ' + esc(s.processo ?? 'processo non impostato') + '</span>' +
                 '</div>' +
                 '<div class="card-actions">' +
                     '<button class="action-btn edit-btn btn-modifica" title="Modifica"><i class="fa-solid fa-pen"></i></button>' +
@@ -351,7 +358,7 @@ async function caricaRicettaSemilavorato(idSem) {
             const tag = co.tipo === 'semilavorato' ? '<span class="badge badge-commessa">semilav.</span>' : '';
             item.innerHTML =
                 '<span class="tree-dot">&#9632;</span>' +
-                '<span class="material-code">' + (co.codice || co.descrizione || '-') + '</span> ' + tag +
+                '<span class="material-code">' + esc(co.codice || co.descrizione || '-') + '</span> ' + tag +
                 '<span class="material-quantity">×' + co.quantita + '</span>' +
                 '<button class="action-btn delete-btn btn-rimuovi-comp" data-id="' + co.id + '" title="Rimuovi"><i class="fa-solid fa-trash"></i></button>';
             item.querySelector('.btn-rimuovi-comp').addEventListener('click', async function() {
@@ -431,10 +438,10 @@ function renderMateriale(dati, container) {
         div.dataset.sezione = 'materie-prime';
         div.innerHTML =
             '<div class="card-left">' +
-                '<span class="item-code commessa-code">' + (m.codice ?? '-') + '</span>' +
+                '<span class="item-code commessa-code">' + esc(m.codice ?? '-') + '</span>' +
             '</div>' +
             '<div class="card-right">' +
-                '<span class="card-desc">' + (m.descrizione ?? '-') + '</span>' +
+                '<span class="card-desc">' + esc(m.descrizione ?? '-') + '</span>' +
             '</div>' +
             '<span class="qty-display ' + qtyClass(m.quantita) + '">' + (m.quantita ?? 0) + '</span>' +
             '<div class="card-actions card-actions-right">' +
@@ -481,8 +488,8 @@ function apriPopupGiacenze(materiali) {
         row.dataset.orig = orig;
         row.innerHTML =
             '<div class="giac-rowm-info">' +
-                '<span class="giac-rowm-cod">' + (m.codice ?? '-') + '</span>' +
-                '<span class="giac-rowm-desc">' + (m.descrizione ?? '') + '</span>' +
+                '<span class="giac-rowm-cod">' + esc(m.codice ?? '-') + '</span>' +
+                '<span class="giac-rowm-desc">' + esc(m.descrizione ?? '') + '</span>' +
             '</div>' +
             '<div class="giac-rowm-step">' +
                 '<input type="number" class="giac-rowm-amt" value="1" min="1" step="1" title="Quantità da aggiungere/togliere">' +
@@ -554,9 +561,9 @@ async function caricaMacchineCommessa(idCommessa) {
             item.className = 'tree-item';
             item.innerHTML =
                 '<span class="tree-dot">&#9632;</span>' +
-                '<button class="material-code machine-link-btn">' + (m.codice ?? '-') + '</button>' +
-                '<span class="material-quantity">' + (m.descrizione ?? '') + '</span>' +
-                '<span class="material-quantity badge ' + statoClass(m.stato) + '">' + labelStatoMacchina(m.stato) + '</span>' +
+                '<button class="material-code machine-link-btn">' + esc(m.codice ?? '-') + '</button>' +
+                '<span class="material-quantity">' + esc(m.descrizione ?? '') + '</span>' +
+                '<span class="material-quantity badge ' + statoClass(m.stato) + '">' + esc(labelStatoMacchina(m.stato)) + '</span>' +
                 '<span class="material-quantity">Qt. ' + (m.quantita ?? '-') + '</span>' +
                 '<button class="action-btn delete-btn btn-rimuovi-mac" data-link-id="' + m.link_id + '" title="Rimuovi dalla commessa"><i class="fa-solid fa-trash"></i></button>';
             item.querySelector('.machine-link-btn').addEventListener('click', function(e) {
@@ -627,8 +634,8 @@ function costruisciAlberoTipi(alb) {
         row.style.marginLeft = (depth * 22) + 'px';
         row.innerHTML =
             '<span class="albero-chip chip-materiale"><i class="fa-solid fa-cube"></i> Materiale</span>' +
-            '<span class="albero-nome">' + (rm.codice ?? '-') + '</span>' +
-            '<span class="albero-desc">' + (rm.descrizione ?? '') + '</span>' +
+            '<span class="albero-nome">' + esc(rm.codice ?? '-') + '</span>' +
+            '<span class="albero-desc">' + esc(rm.descrizione ?? '') + '</span>' +
             '<span class="albero-qty">×' + (rm.quantita_richiesta ?? 1) + '</span>';
         cont.appendChild(row);
     }
@@ -641,7 +648,7 @@ function costruisciAlberoTipi(alb) {
             (isSem
                 ? '<span class="albero-chip chip-semilav"><i class="fa-solid fa-cubes-stacked"></i> Semilavorato</span>'
                 : '<span class="albero-chip chip-processo"><i class="fa-solid fa-screwdriver-wrench"></i> Processo</span>') +
-            '<span class="albero-nome">' + (lav.descrizione ?? '-') + '</span>';
+            '<span class="albero-nome">' + esc(lav.descrizione ?? '-') + '</span>';
         cont.appendChild(row);
         (lav.rich_mat || []).forEach(rm => rigaMateriale(rm, depth + 1));
         (lav.figli || []).forEach(f => rigaLavorazione(f, depth + 1));
@@ -691,7 +698,7 @@ async function apriStoricoMacchina(idMacchina, codice) {
     ov.className = 'modal-overlay open';
     ov.innerHTML =
         '<div class="modal modal-storico"><div class="modal-header">' +
-        '<h3><i class="fa-solid fa-clock-rotate-left"></i> Storico lavorazioni — ' + (codice ?? '') + '</h3>' +
+        '<h3><i class="fa-solid fa-clock-rotate-left"></i> Storico lavorazioni — ' + esc(codice ?? '') + '</h3>' +
         '<button class="modal-close"><i class="fa-solid fa-xmark"></i></button></div>' +
         '<div class="modal-body" id="storicoBody"></div>' +
         '<div class="modal-footer"><button class="modal-btn-cancel">Chiudi</button></div></div>';
@@ -752,7 +759,7 @@ function apriModale(sezione, datiEsistenti = null) {
             return '<div class="modal-field"><label>' + campo.label + '</label><select id="field_' + campo.key + '">' + opts + '</select></div>';
         }
         return '<div class="modal-field"><label>' + campo.label + (campo.optional ? ' <span style="color:#aaa;font-weight:400">(opzionale)</span>' : '') + '</label>' +
-               '<input type="' + campo.type + '" id="field_' + campo.key + '" value="' + (valore ?? '') + '" placeholder="' + campo.label + '"' +
+               '<input type="' + campo.type + '" id="field_' + campo.key + '" value="' + esc(valore ?? '') + '" placeholder="' + campo.label + '"' +
                (campo.min !== undefined ? ' min="' + campo.min + '"' : '') + '></div>';
     }).join('');
 
@@ -1629,9 +1636,6 @@ function mostraComMenu(items, domPos) {
 document.getElementById('commessaPanelClose').addEventListener('click', chiudiVistaCommessa);
 document.getElementById('commessaOverlay').addEventListener('click', function(e) {
     if (e.target === this) chiudiVistaCommessa();
-<<<<<<< HEAD
-});
-=======
 });
 
 // Vai dalla vista commessa alla scaffalatura (cella) della stessa commessa
@@ -1649,4 +1653,3 @@ if (_btnToScaffale) _btnToScaffale.addEventListener('click', () => {
     const comm = (await res.json()).find(c => String(c.id) === String(idc));
     if (comm) apriVistaCommessa(comm);
 })();
->>>>>>> 64b71d2a7edc54f65dc505dae6cb5e67721da40b

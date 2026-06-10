@@ -1423,4 +1423,6 @@ with app.app_context():
     print("[DB] Database pronto.")
 
 if __name__ == "__main__":
-    app.run(port=5001, debug=True)
+    # debug attivabile SOLO via variabile d'ambiente (mai in produzione):
+    # il debugger Werkzeug espone stack trace e una console eseguibile (rischio RCE).
+    app.run(port=5001, debug=os.getenv("FLASK_DEBUG") == "1")
